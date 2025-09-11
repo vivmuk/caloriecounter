@@ -63,17 +63,29 @@ export default function App() {
   async function startCamera() {
     try {
       setError(null);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } // Use rear camera on mobile
-      });
-      setStream(mediaStream);
       setShowCamera(true);
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment', // Use rear camera on mobile
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
+      
+      setStream(mediaStream);
+      
+      // Wait for video element to be available
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          videoRef.current.play();
+        }
+      }, 100);
+      
     } catch (err) {
       setError("Camera access denied. Please allow camera permission and try again.");
+      setShowCamera(false);
       console.error('Camera error:', err);
     }
   }
@@ -118,6 +130,14 @@ export default function App() {
       }
     };
   }, [stream]);
+
+  // Set video stream when it becomes available
+  React.useEffect(() => {
+    if (stream && videoRef.current && showCamera) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(console.error);
+    }
+  }, [stream, showCamera]);
 
   async function onAnalyze() {
     if (!file) return;
@@ -182,13 +202,36 @@ export default function App() {
             </div>
             
             {showCamera ? (
-              <div style={{ background: "#000", borderRadius: 24, overflow: "hidden", position: "relative" }}>
+              <div style={{ 
+                background: "#000", 
+                borderRadius: 24, 
+                overflow: "hidden", 
+                position: "relative",
+                minHeight: "300px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}>
                 <video 
                   ref={videoRef} 
                   autoPlay 
                   playsInline 
-                  style={{ width: "100%", height: "300px", objectFit: "cover" }}
+                  muted
+                  style={{ 
+                    width: "100%", 
+                    height: "300px", 
+                    objectFit: "cover",
+                    display: stream ? "block" : "none"
+                  }}
+                  onLoadedMetadata={() => {
+                    console.log("Video loaded");
+                  }}
                 />
+                {!stream && (
+                  <div style={{ color: "#fff", textAlign: "center" }}>
+                    <div>Starting camera...</div>
+                  </div>
+                )}
                 <canvas ref={canvasRef} style={{ display: "none" }} />
                 <div style={{ 
                   position: "absolute", 
@@ -201,15 +244,17 @@ export default function App() {
                 }}>
                   <button onClick={stopCamera} style={{
                     width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, backdropFilter: "blur(10px)"
                   }}>✕</button>
-                  <button onClick={capturePhoto} style={{
-                    width: 64, height: 64, borderRadius: 999, background: "#fff", color: "#000", border: "4px solid rgba(255,255,255,0.3)", cursor: "pointer",
+                  <button onClick={capturePhoto} disabled={!stream} style={{
+                    width: 64, height: 64, borderRadius: 999, background: stream ? "#fff" : "rgba(255,255,255,0.5)", color: "#000", border: "4px solid rgba(255,255,255,0.3)", cursor: stream ? "pointer" : "not-allowed",
                     display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
-                  }}>📷</button>
+                  }}>
+                    <CameraIcon size={24} color={stream ? "#000" : "#666"} />
+                  </button>
                   <button onClick={() => document.getElementById("fileInput")?.click()} style={{
                     width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center"
+                    display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(10px)"
                   }}>
                     <GalleryIcon size={20} color="#fff" />
                   </button>
