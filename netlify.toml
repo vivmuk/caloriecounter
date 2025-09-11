@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = "build/client"
+  publish = "dist"
 
 [[redirects]]
   from = "/api/venice"
@@ -12,7 +12,7 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# SPA fallback for client-side routing in build/client
+# SPA fallback for client-side routing in dist
 [[redirects]]
   from = "/*"
   to = "/index.html"
