@@ -1,0 +1,7 @@
+# Functions proxy
+/api/venice /.netlify/functions/venice 200
+/api/* /.netlify/functions/:splat 200
+
+# SPA fallback for client-side routing
+/* /index.html 200
+

@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "build/client"
+
+[[redirects]]
+  from = "/api/venice"
+  to = "/.netlify/functions/venice"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback for client-side routing in build/client
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = []
+

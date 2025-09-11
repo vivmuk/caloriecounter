@@ -31,6 +31,7 @@ export type NutritionSummary = {
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
+const VENICE_PROXY_URL = "/api/venice"; // Netlify function proxy for production
 const VENICE_MODEL = "mistral-31-24b"; // supports vision per Venice model list
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -148,14 +149,22 @@ export async function analyzeImageWithVenice(file: File): Promise<NutritionSumma
     }
   } as const;
 
-  const res = await fetch(VENICE_API_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${VENICE_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
+  async function post(url: string) {
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${VENICE_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+  }
+
+  let res = await post(VENICE_API_URL);
+  if (!res.ok) {
+    // fallback via Netlify proxy to avoid CORS in production
+    res = await post(VENICE_PROXY_URL);
+  }
 
   if (!res.ok) {
     const text = await res.text();
