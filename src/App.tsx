@@ -63,28 +63,21 @@ export default function App() {
   async function startCamera() {
     try {
       setError(null);
-      setShowCamera(true);
       
+      // Request camera permission and get stream
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'environment', // Use rear camera on mobile
+          facingMode: { ideal: 'environment' }, // Prefer rear camera on mobile
           width: { ideal: 1280 },
-          height: { ideal: 720 }
+          height: { ideal: 960 }
         } 
       });
       
       setStream(mediaStream);
-      
-      // Wait for video element to be available
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          videoRef.current.play();
-        }
-      }, 100);
+      setShowCamera(true);
       
     } catch (err) {
-      setError("Camera access denied. Please allow camera permission and try again.");
+      setError("Camera access denied. Please allow camera permission or try uploading a photo instead.");
       setShowCamera(false);
       console.error('Camera error:', err);
     }
@@ -207,7 +200,7 @@ export default function App() {
                 borderRadius: 24, 
                 overflow: "hidden", 
                 position: "relative",
-                minHeight: "300px",
+                aspectRatio: "4/3",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center"
@@ -219,41 +212,36 @@ export default function App() {
                   muted
                   style={{ 
                     width: "100%", 
-                    height: "300px", 
-                    objectFit: "cover",
-                    display: stream ? "block" : "none"
-                  }}
-                  onLoadedMetadata={() => {
-                    console.log("Video loaded");
+                    height: "100%", 
+                    objectFit: "cover"
                   }}
                 />
-                {!stream && (
-                  <div style={{ color: "#fff", textAlign: "center" }}>
-                    <div>Starting camera...</div>
-                  </div>
-                )}
                 <canvas ref={canvasRef} style={{ display: "none" }} />
+                
+                {/* Camera controls overlay */}
                 <div style={{ 
                   position: "absolute", 
-                  bottom: 16, 
+                  bottom: 20, 
                   left: "50%", 
                   transform: "translateX(-50%)", 
                   display: "flex", 
-                  gap: 16, 
+                  gap: 20, 
                   alignItems: "center" 
                 }}>
                   <button onClick={stopCamera} style={{
-                    width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, backdropFilter: "blur(10px)"
+                    width: 50, height: 50, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "#fff", border: "2px solid rgba(255,255,255,0.3)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, backdropFilter: "blur(10px)"
                   }}>✕</button>
-                  <button onClick={capturePhoto} disabled={!stream} style={{
-                    width: 64, height: 64, borderRadius: 999, background: stream ? "#fff" : "rgba(255,255,255,0.5)", color: "#000", border: "4px solid rgba(255,255,255,0.3)", cursor: stream ? "pointer" : "not-allowed",
-                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+                  
+                  <button onClick={capturePhoto} style={{
+                    width: 70, height: 70, borderRadius: "50%", background: "#fff", color: "#000", border: "4px solid rgba(255,255,255,0.8)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
                   }}>
-                    <CameraIcon size={24} color={stream ? "#000" : "#666"} />
+                    <div style={{ width: 50, height: 50, borderRadius: "50%", background: "#000" }}></div>
                   </button>
+                  
                   <button onClick={() => document.getElementById("fileInput")?.click()} style={{
-                    width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
+                    width: 50, height: 50, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "#fff", border: "2px solid rgba(255,255,255,0.3)", cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(10px)"
                   }}>
                     <GalleryIcon size={20} color="#fff" />
@@ -264,32 +252,50 @@ export default function App() {
               <div style={{ 
                 background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)", 
                 color: "#fff", 
-                padding: 24, 
+                padding: 32, 
                 borderRadius: 24, 
-                display: "grid", 
-                placeItems: "center",
+                display: "flex", 
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 40,
                 boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)"
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-                  <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
-                    width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
-                  }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
-                    <GalleryIcon size={24} color="#fff" />
-                  </button>
-                  <button onClick={startCamera} style={{ 
-                    width: 72, height: 72, borderRadius: 999, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 20px rgba(102, 126, 234, 0.4)", transition: "all 0.2s ease"
-                  }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-                    <CameraIcon size={32} color="#fff" />
-                  </button>
-                  <button onClick={startCamera} style={{ 
-                    width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
-                  }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
-                    <CameraIcon size={24} color="#fff" />
-                  </button>
-                </div>
+                <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 12,
+                  background: "rgba(255,255,255,0.1)", 
+                  color: "#fff", 
+                  border: 0, 
+                  cursor: "pointer",
+                  padding: 20,
+                  borderRadius: 16,
+                  transition: "all 0.2s ease",
+                  minWidth: 120
+                }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
+                  <GalleryIcon size={32} color="#fff" />
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>Upload Photo</span>
+                </button>
+                
+                <button onClick={startCamera} style={{ 
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 12,
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
+                  color: "#fff", 
+                  border: 0, 
+                  cursor: "pointer",
+                  padding: 20,
+                  borderRadius: 16,
+                  boxShadow: "0 8px 20px rgba(102, 126, 234, 0.4)", 
+                  transition: "all 0.2s ease",
+                  minWidth: 120
+                }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
+                  <CameraIcon size={32} color="#fff" />
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>Take Photo</span>
+                </button>
               </div>
             )}
             
