@@ -45,6 +45,10 @@ export default function App() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<NutritionSummary | null>(null);
+  const [showCamera, setShowCamera] = React.useState(false);
+  const [stream, setStream] = React.useState<MediaStream | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -55,6 +59,65 @@ export default function App() {
     const url = URL.createObjectURL(f);
     setImage(url);
   }
+
+  async function startCamera() {
+    try {
+      setError(null);
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } // Use rear camera on mobile
+      });
+      setStream(mediaStream);
+      setShowCamera(true);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      setError("Camera access denied. Please allow camera permission and try again.");
+      console.error('Camera error:', err);
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setShowCamera(false);
+  }
+
+  function capturePhoto() {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) return;
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+        setFile(file);
+        const url = URL.createObjectURL(blob);
+        setImage(url);
+        stopCamera();
+      }
+    }, 'image/jpeg', 0.85);
+  }
+
+  React.useEffect(() => {
+    return () => {
+      // Cleanup camera stream on unmount
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   async function onAnalyze() {
     if (!file) return;
@@ -117,38 +180,76 @@ export default function App() {
               <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#1e293b" }}>Food Scanner</h1>
               <div style={{ color: "#64748b", fontSize: 16, marginTop: 4 }}>Take a photo or select from gallery to analyze your food</div>
             </div>
-            <div style={{ 
-              background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)", 
-              color: "#fff", 
-              padding: 24, 
-              borderRadius: 24, 
-              display: "grid", 
-              placeItems: "center",
-              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)"
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-                <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
-                  width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
-                }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
-                  <GalleryIcon size={24} color="#fff" />
-                </button>
-                <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
-                  width: 72, height: 72, borderRadius: 999, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "#fff", border: 0, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 20px rgba(102, 126, 234, 0.4)", transition: "all 0.2s ease"
-                }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-                  <CameraIcon size={32} color="#fff" />
-                </button>
-                <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
-                  width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
-                }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
-                  <CameraIcon size={24} color="#fff" />
-                </button>
+            
+            {showCamera ? (
+              <div style={{ background: "#000", borderRadius: 24, overflow: "hidden", position: "relative" }}>
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  style={{ width: "100%", height: "300px", objectFit: "cover" }}
+                />
+                <canvas ref={canvasRef} style={{ display: "none" }} />
+                <div style={{ 
+                  position: "absolute", 
+                  bottom: 16, 
+                  left: "50%", 
+                  transform: "translateX(-50%)", 
+                  display: "flex", 
+                  gap: 16, 
+                  alignItems: "center" 
+                }}>
+                  <button onClick={stopCamera} style={{
+                    width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18
+                  }}>✕</button>
+                  <button onClick={capturePhoto} style={{
+                    width: 64, height: 64, borderRadius: 999, background: "#fff", color: "#000", border: "4px solid rgba(255,255,255,0.3)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+                  }}>📷</button>
+                  <button onClick={() => document.getElementById("fileInput")?.click()} style={{
+                    width: 48, height: 48, borderRadius: 999, background: "rgba(255,255,255,0.2)", color: "#fff", border: 0, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center"
+                  }}>
+                    <GalleryIcon size={20} color="#fff" />
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ 
+                background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)", 
+                color: "#fff", 
+                padding: 24, 
+                borderRadius: 24, 
+                display: "grid", 
+                placeItems: "center",
+                boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+                  <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
+                    width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
+                  }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
+                    <GalleryIcon size={24} color="#fff" />
+                  </button>
+                  <button onClick={startCamera} style={{ 
+                    width: 72, height: 72, borderRadius: 999, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "#fff", border: 0, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 20px rgba(102, 126, 234, 0.4)", transition: "all 0.2s ease"
+                  }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
+                    <CameraIcon size={32} color="#fff" />
+                  </button>
+                  <button onClick={startCamera} style={{ 
+                    width: 52, height: 52, borderRadius: 999, background: "rgba(255,255,255,0.1)", color: "#fff", border: 0, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
+                  }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
+                    <CameraIcon size={24} color="#fff" />
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <input id="fileInput" type="file" accept="image/*" onChange={onSelect} style={{ display: "none" }} />
-            {image && <img src={image} alt="preview" style={{ width: "100%", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }} />}
+            {image && !showCamera && <img src={image} alt="preview" style={{ width: "100%", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }} />}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={onAnalyze} disabled={!file || loading} style={{ 
                 background: loading ? "#94a3b8" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
@@ -165,7 +266,7 @@ export default function App() {
               }}>
                 {loading ? "Analyzing..." : "Analyze Image"}
               </button>
-              <button onClick={() => { setFile(null); setImage(null); setResult(null); setError(null); }} disabled={loading} style={{ 
+              <button onClick={() => { setFile(null); setImage(null); setResult(null); setError(null); stopCamera(); }} disabled={loading} style={{ 
                 border: "1px solid #e2e8f0", 
                 background: "#fff",
                 padding: "14px 20px", 
