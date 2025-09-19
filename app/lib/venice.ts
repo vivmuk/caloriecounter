@@ -38,7 +38,7 @@ export type NutritionSummary = {
   analysis?: NutritionAnalysis;
 };
 
-export type VeniceVisionModelId = "qwen-2.5-vl";
+export type VeniceVisionModelId = "qwen-2.5-vl" | "venice-medium" | "venice-large";
 
 export type VeniceVisionModelConfig = {
   id: VeniceVisionModelId;
@@ -59,6 +59,18 @@ export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
     label: "Qwen 2.5 VL",
     description: "72B flagship: balanced reasoning, confident portion sizing",
     badge: "Best overall",
+  },
+  {
+    id: "venice-medium",
+    label: "Venice Medium",
+    description: "24B: fast responses, good for quick nutrition analysis",
+    badge: "Fast",
+  },
+  {
+    id: "venice-large",
+    label: "Venice Large",
+    description: "235B: deep reasoning, excellent for complex dishes",
+    badge: "Premium",
   },
 ];
 
@@ -103,7 +115,9 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
   const model = options.model ?? DEFAULT_MODEL;
-  const selectedModel: VeniceVisionModelId = model === "qwen-2.5-vl" ? "qwen-2.5-vl" : DEFAULT_MODEL;
+  // Ensure we only use supported vision models
+  const supportedModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "venice-medium", "venice-large"];
+  const selectedModel: VeniceVisionModelId = supportedModels.includes(model) ? model : DEFAULT_MODEL;
 
   const schema = {
     type: "object",

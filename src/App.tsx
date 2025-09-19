@@ -611,7 +611,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app pairs computer vision with Venice-hosted vision models like Qwen 2.5 VL for high-quality analysis.
+                  The app pairs computer vision with Venice-hosted vision models (Qwen 2.5 VL, Venice Medium, Venice Large) so you can choose the right analyst for every plate.
                 </p>
               </div>
 
