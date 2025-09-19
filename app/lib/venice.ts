@@ -38,7 +38,7 @@ export type NutritionSummary = {
   analysis?: NutritionAnalysis;
 };
 
-export type VeniceVisionModelId = "qwen-2.5-vl" | "mistral-31-24b" | "mistral-32-24b";
+export type VeniceVisionModelId = "qwen-2.5-vl";
 
 export type VeniceVisionModelConfig = {
   id: VeniceVisionModelId;
@@ -59,18 +59,6 @@ export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
     label: "Qwen 2.5 VL",
     description: "72B flagship: balanced reasoning, confident portion sizing",
     badge: "Best overall",
-  },
-  {
-    id: "mistral-31-24b",
-    label: "Mistral 3.1 Vision",
-    description: "24B: fast responses, solid ingredient spotting",
-    badge: "Fast",
-  },
-  {
-    id: "mistral-32-24b",
-    label: "Mistral 3.2 Vision (Beta)",
-    description: "24B beta: handles tricky lighting and plating",
-    badge: "Beta",
   },
 ];
 
@@ -115,6 +103,7 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
   const model = options.model ?? DEFAULT_MODEL;
+  const selectedModel: VeniceVisionModelId = model === "qwen-2.5-vl" ? "qwen-2.5-vl" : DEFAULT_MODEL;
 
   const schema = {
     type: "object",
@@ -229,7 +218,7 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   });
 
   const body = {
-    model,
+    model: selectedModel,
     temperature: 0.15,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
     venice_parameters: { include_venice_system_prompt: true },
@@ -280,6 +269,9 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
 
   if (!res.ok) {
     const text = await res.text();
+    if (text && (text.includes("Unsupported tokenizer") || text.includes("MistralTokenizer"))) {
+      throw new Error("Selected model is not supported for vision on Venice. Please switch to Qwen 2.5 VL and try again.");
+    }
     throw new Error(`Venice API error: ${res.status} ${text}`);
   }
 
