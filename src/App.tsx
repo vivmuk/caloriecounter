@@ -1,5 +1,5 @@
 import * as React from "react";
-import { analyzeImageWithVenice, VENICE_VISION_MODELS, VENICE_TEXT_MODELS, type NutritionSummary, type VeniceVisionModelId, type VeniceTextModelId } from "../app/lib/venice";
+import { analyzeImageWithVenice, type NutritionSummary } from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
@@ -18,13 +18,13 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
-  const [visionModelId, setVisionModelId] = React.useState<VeniceVisionModelId>(VENICE_VISION_MODELS[0].id);
-  const [textModelId, setTextModelId] = React.useState<VeniceTextModelId>(VENICE_TEXT_MODELS[0].id);
+  // Models are now hardcoded in the Venice function
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
-  const activeVisionModel = React.useMemo(() => VENICE_VISION_MODELS.find((entry) => entry.id === visionModelId) ?? VENICE_VISION_MODELS[0], [visionModelId]);
-  const activeTextModel = React.useMemo(() => VENICE_TEXT_MODELS.find((entry) => entry.id === textModelId) ?? VENICE_TEXT_MODELS[0], [textModelId]);
+  // Hardcoded model names for display
+  const activeVisionModel = { label: "Qwen 2.5 VL 72B" };
+  const activeTextModel = { label: "Venice Large 1.1" };
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -139,8 +139,6 @@ export default function App() {
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
-        visionModel: visionModelId,
-        textModel: textModelId,
       });
       setResult(summary);
     } catch (err) {
@@ -457,113 +455,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 16 }}>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <label style={{ fontWeight: 600, color: "#334155" }}>
-                      Vision model (food detection)
-                    </label>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {VENICE_VISION_MODELS.map((candidate) => {
-                        const isActive = candidate.id === visionModelId;
-                        return (
-                          <button
-                            key={candidate.id}
-                            type="button"
-                            onClick={() => setVisionModelId(candidate.id)}
-                            disabled={loading}
-                            aria-pressed={isActive}
-                            title={candidate.description}
-                            style={{
-                              padding: "8px 14px",
-                              borderRadius: 999,
-                              border: isActive ? "1px solid rgba(79,70,229,0.7)" : "1px solid rgba(148,163,184,0.45)",
-                              background: isActive ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.12) 100%)" : "rgba(255,255,255,0.9)",
-                              color: isActive ? "#4338ca" : "#475569",
-                              fontWeight: 600,
-                              fontSize: 13,
-                              letterSpacing: 0.2,
-                              cursor: loading ? "not-allowed" : "pointer",
-                              boxShadow: isActive ? "0 10px 24px -18px rgba(79,70,229,0.75)" : "none",
-                              transition: "transform 0.15s ease, border 0.2s ease",
-                            }}
-                          >
-                            <span>{candidate.label}</span>
-                            {candidate.badge && (
-                              <span
-                                style={{
-                                  marginLeft: 6,
-                                  padding: "2px 6px",
-                                  borderRadius: 999,
-                                  background: isActive ? "rgba(67,56,202,0.15)" : "rgba(148,163,184,0.2)",
-                                  fontSize: 10,
-                                  letterSpacing: 0.6,
-                                  textTransform: "uppercase",
-                                  color: isActive ? "#4338ca" : "#64748b",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {candidate.badge}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>{activeVisionModel.description}</div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontWeight: 600, color: "#334155", textAlign: "center" }}>
+                    AI Models: {activeVisionModel.label} + {activeTextModel.label}
                   </div>
-
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <label style={{ fontWeight: 600, color: "#334155" }}>
-                      Analysis model (nutrition calculation)
-                    </label>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {VENICE_TEXT_MODELS.map((candidate) => {
-                        const isActive = candidate.id === textModelId;
-                        return (
-                          <button
-                            key={candidate.id}
-                            type="button"
-                            onClick={() => setTextModelId(candidate.id)}
-                            disabled={loading}
-                            aria-pressed={isActive}
-                            title={candidate.description}
-                            style={{
-                              padding: "8px 14px",
-                              borderRadius: 999,
-                              border: isActive ? "1px solid rgba(34,197,94,0.7)" : "1px solid rgba(148,163,184,0.45)",
-                              background: isActive ? "linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(74,222,128,0.12) 100%)" : "rgba(255,255,255,0.9)",
-                              color: isActive ? "#059669" : "#475569",
-                              fontWeight: 600,
-                              fontSize: 13,
-                              letterSpacing: 0.2,
-                              cursor: loading ? "not-allowed" : "pointer",
-                              boxShadow: isActive ? "0 10px 24px -18px rgba(34,197,94,0.75)" : "none",
-                              transition: "transform 0.15s ease, border 0.2s ease",
-                            }}
-                          >
-                            <span>{candidate.label}</span>
-                            {candidate.badge && (
-                              <span
-                                style={{
-                                  marginLeft: 6,
-                                  padding: "2px 6px",
-                                  borderRadius: 999,
-                                  background: isActive ? "rgba(5,150,105,0.15)" : "rgba(148,163,184,0.2)",
-                                  fontSize: 10,
-                                  letterSpacing: 0.6,
-                                  textTransform: "uppercase",
-                                  color: isActive ? "#059669" : "#64748b",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {candidate.badge}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>{activeTextModel.description}</div>
+                  <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
+                    Optimized two-stage processing for accurate nutrition analysis
                   </div>
                 </div>
 

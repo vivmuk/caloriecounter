@@ -92,8 +92,8 @@ export const VENICE_TEXT_MODELS: VeniceTextModelConfig[] = [
   },
 ];
 
-const DEFAULT_VISION_MODEL: VeniceVisionModelId = VENICE_VISION_MODELS[0].id;
-const DEFAULT_TEXT_MODEL: VeniceTextModelId = VENICE_TEXT_MODELS[0].id;
+const DEFAULT_VISION_MODEL: VeniceVisionModelId = "qwen-2.5-vl";
+const DEFAULT_TEXT_MODEL: VeniceTextModelId = "qwen3-235b";
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
@@ -118,7 +118,7 @@ const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Calcula
 - Measurement assumptions and limitations
 Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 512, quality = 0.9): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 1.0): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -545,12 +545,14 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
   return parsed;
 }
 
-// Main analysis function with fallback
+// Main analysis function with hardcoded models
 export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
-  const visionModel = options.visionModel ?? DEFAULT_VISION_MODEL;
-  const textModel = options.textModel ?? DEFAULT_TEXT_MODEL;
+  
+  // Hardcoded: Qwen for vision, Venice Large 1.1 for analysis
+  const visionModel = "qwen-2.5-vl";
+  const textModel = "qwen3-235b";
 
   try {
     // Try two-stage processing first
