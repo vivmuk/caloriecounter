@@ -115,7 +115,7 @@ const VISION_SYSTEM_PROMPT = `You are a food identification specialist. Analyze 
 
 const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a detailed description of food items and portions, calculate precise macro and micronutrient content. Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 800, quality = 0.75): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -194,58 +194,88 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
   const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
 
-  const userContent: VeniceMessageContent[] = [];
-  if (userDishDescription) {
-    userContent.push({
-      type: "text",
-      text: `User provided dish hint: "${userDishDescription}". Use this to guide your analysis.`
-    });
-  }
-  userContent.push({
-    type: "text",
-    text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
-  });
-  
   // Debug: log image data format
   console.log("Image data URL length:", imageDataUrl.length);
   console.log("Image data URL prefix:", imageDataUrl.substring(0, 50));
   
-  userContent.push({
-    type: "image_url",
-    image_url: { 
-      url: imageDataUrl,
-      detail: "high"
-    }
-  });
+  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+  console.log("Base64 data length:", base64Data.length);
 
-  const body = {
-    model: selectedVisionModel,
-    temperature: 0.1,
-    messages: [
-      {
-        role: "system",
-        content: [{ type: "text", text: VISION_SYSTEM_PROMPT }]
-      },
-      {
-        role: "user",
-        content: userContent
+  // Try different image formats for Venice API
+  const imageFormats = [
+    {
+      name: "Standard data URL (OpenAI compatible)",
+      imageContent: {
+        type: "image_url" as const,
+        image_url: { url: imageDataUrl }
       }
-    ]
-  };
-  
-  // Debug: log request details
-  console.log("Vision request model:", selectedVisionModel);
-  console.log("Vision request body size:", JSON.stringify(body).length);
+    },
+    {
+      name: "Base64 only (Venice specific)",
+      imageContent: {
+        type: "image_url" as const,
+        image_url: { url: base64Data }
+      }
+    },
+    {
+      name: "Reconstructed data URL",
+      imageContent: {
+        type: "image_url" as const,
+        image_url: { url: `data:image/jpeg;base64,${base64Data}` }
+      }
+    }
+  ];
 
-  const res = await makeVeniceRequest(body);
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  
-  if (!content) {
-    throw new Error("No food identification returned from Venice vision model");
+  for (const format of imageFormats) {
+    try {
+      console.log(`Trying format: ${format.name}`);
+      
+      const userContent: VeniceMessageContent[] = [];
+      if (userDishDescription) {
+        userContent.push({
+          type: "text",
+          text: `User provided dish hint: "${userDishDescription}". Use this to guide your analysis.`
+        });
+      }
+      userContent.push({
+        type: "text",
+        text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
+      });
+      userContent.push(format.imageContent);
+
+      const body = {
+        model: selectedVisionModel,
+        temperature: 0.1,
+        messages: [
+          {
+            role: "system",
+            content: [{ type: "text", text: VISION_SYSTEM_PROMPT }]
+          },
+          {
+            role: "user",
+            content: userContent
+          }
+        ]
+      };
+      
+      console.log("Vision request model:", selectedVisionModel);
+      console.log("Vision request body size:", JSON.stringify(body).length);
+
+      const res = await makeVeniceRequest(body);
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      
+      if (content) {
+        console.log(`✅ Success with format: ${format.name}`);
+        return typeof content === "string" ? content : JSON.stringify(content);
+      }
+    } catch (error) {
+      console.warn(`❌ Failed with format: ${format.name}`, error);
+      // Continue to next format
+    }
   }
   
-  return typeof content === "string" ? content : JSON.stringify(content);
+  throw new Error("All image formats failed - Venice vision model may not support image input");
 }
 
 // Stage 2: Nutrition calculation using text model
