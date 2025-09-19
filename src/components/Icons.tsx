@@ -69,3 +69,9 @@ export const DropletIcon = ({ size = 24, color = "currentColor" }: { size?: numb
     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.32 0L12 2.69z"/>
   </svg>
 );
+
+export const SparkleIcon = ({ size = 24, color = "currentColor" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2l2.2 4.8L19 8l-4 3.6L16 17l-4-2.4L8 17l1-5.4L5 8l4.8-1.2L12 2z" />
+  </svg>
+);

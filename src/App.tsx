@@ -1,43 +1,11 @@
 import * as React from "react";
 import { analyzeImageWithVenice, type NutritionSummary } from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
-import { CameraIcon, GalleryIcon, AddIcon, CalendarIcon, HistoryIcon, UserIcon, FlameIcon, MeatIcon, WheatIcon, DropletIcon } from "./components/Icons";
+import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
-function TodayCard({ total, goal, protein, carbs, fat }: { total: number; goal: number; protein: number; carbs: number; fat: number; }) {
-  const pct = Math.min(100, Math.round((total / goal) * 100));
-  return (
-    <div style={{ 
-      background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)", 
-      border: "1px solid #e2e8f0", 
-      borderRadius: 20, 
-      padding: 20,
-      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
-    }}>
-      <div style={{ textAlign: "center", fontSize: 48, fontWeight: 700, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", marginBottom: 4 }}>{Math.round(total)}</div>
-      <div style={{ textAlign: "center", color: "#64748b", fontSize: 16, fontWeight: 500 }}>/ {goal} cal</div>
-      <div style={{ height: 12, background: "#e2e8f0", borderRadius: 999, margin: "16px 0", overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: 12, background: "linear-gradient(90deg, #667eea 0%, #764ba2 100%)", borderRadius: 999, transition: "width 0.3s ease" }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <Macro label="Protein" grams={protein} color="#ef4444" icon={<MeatIcon size={16} color="#ef4444" />} />
-        <Macro label="Carbs" grams={carbs} color="#f59e0b" icon={<WheatIcon size={16} color="#f59e0b" />} />
-        <Macro label="Fat" grams={fat} color="#8b5cf6" icon={<DropletIcon size={16} color="#8b5cf6" />} />
-      </div>
-    </div>
-  );
-}
+type Section = "scan" | "howItWorks";
 
-function Macro({ label, grams, color, icon }: { label: string; grams: number; color: string; icon: React.ReactNode }) {
-  return (
-    <div style={{ textAlign: "center", flex: 1, padding: 12, background: "#f8fafc", borderRadius: 12, border: `1px solid ${color}20` }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginBottom: 4 }}>
-        {icon}
-        <div style={{ fontWeight: 600, color }}>{Math.round(grams)}g</div>
-      </div>
-      <div style={{ color: "#64748b", fontSize: 12, fontWeight: 500 }}>{label}</div>
-    </div>
-  );
-}
+type VeniceContentElement = { id: Section; label: string; icon: React.ReactElement<{ color?: string }> };
 
 export default function App() {
   const [image, setImage] = React.useState<string | null>(null);
@@ -47,6 +15,9 @@ export default function App() {
   const [result, setResult] = React.useState<NutritionSummary | null>(null);
   const [showCamera, setShowCamera] = React.useState(false);
   const [stream, setStream] = React.useState<MediaStream | null>(null);
+  const [cameraLoading, setCameraLoading] = React.useState(false);
+  const [activeSection, setActiveSection] = React.useState<Section>("scan");
+  const [dishHint, setDishHint] = React.useState("");
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
@@ -58,73 +29,91 @@ export default function App() {
     setFile(f);
     const url = URL.createObjectURL(f);
     setImage(url);
+    setShowCamera(false);
   }
 
   async function startCamera() {
     try {
       setError(null);
-      
-      // Request camera permission and get stream
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: { ideal: 'environment' }, // Prefer rear camera on mobile
-          width: { ideal: 1280 },
-          height: { ideal: 960 }
-        } 
-      });
-      
-      setStream(mediaStream);
+      setCameraLoading(true);
       setShowCamera(true);
-      
+
+      let mediaStream: MediaStream | null = null;
+
+      const configs: MediaStreamConstraints[] = [
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1600 }, height: { ideal: 1200 } } },
+        { video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 960 } } },
+        { video: { width: { ideal: 1280 }, height: { ideal: 960 } } },
+        { video: true }
+      ];
+
+      for (const config of configs) {
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia(config);
+          break;
+        } catch (configErr) {
+          console.warn("Camera config failed", config, configErr);
+          continue;
+        }
+      }
+
+      if (!mediaStream) {
+        throw new Error("No camera configuration worked");
+      }
+
+      setStream(mediaStream);
+      setCameraLoading(false);
+      setImage(null);
+      setFile(null);
     } catch (err) {
-      setError("Camera access denied. Please allow camera permission or try uploading a photo instead.");
+      setError("Camera not available. Please check permissions or try uploading a photo instead.");
       setShowCamera(false);
-      console.error('Camera error:', err);
+      setCameraLoading(false);
+      console.error("Camera error:", err);
     }
   }
 
   function stopCamera() {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       setStream(null);
     }
     setShowCamera(false);
+    setCameraLoading(false);
   }
 
   function capturePhoto() {
     if (!videoRef.current || !canvasRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext("2d");
+
     if (!ctx) return;
-    
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
-    
+
     canvas.toBlob((blob) => {
       if (blob) {
-        const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
-        setFile(file);
+        const capturedFile = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+        setFile(capturedFile);
         const url = URL.createObjectURL(blob);
         setImage(url);
         stopCamera();
       }
-    }, 'image/jpeg', 0.85);
+    }, "image/jpeg", 0.9);
   }
 
   React.useEffect(() => {
     return () => {
-      // Cleanup camera stream on unmount
       if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
       }
     };
   }, [stream]);
 
-  // Set video stream when it becomes available
   React.useEffect(() => {
     if (stream && videoRef.current && showCamera) {
       videoRef.current.srcObject = stream;
@@ -132,12 +121,20 @@ export default function App() {
     }
   }, [stream, showCamera]);
 
+  React.useEffect(() => {
+    if (activeSection !== "scan") {
+      stopCamera();
+    }
+  }, [activeSection]);
+
   async function onAnalyze() {
     if (!file) return;
     setLoading(true);
     setError(null);
     try {
-      const summary = await analyzeImageWithVenice(file);
+      const summary = await analyzeImageWithVenice(file, {
+        userDishDescription: dishHint.trim() || undefined,
+      });
       setResult(summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to analyze image");
@@ -146,291 +143,511 @@ export default function App() {
     }
   }
 
-  const [tab, setTab] = React.useState<"today" | "add" | "history" | "profile">("today");
-  const calories = result?.totalCalories ?? 0;
-  const protein = result?.macros.protein.grams ?? 0;
-  const carbs = result?.macros.carbs.grams ?? 0;
-  const fat = result?.macros.fat.grams ?? 0;
+  function onClear() {
+    setFile(null);
+    setImage(null);
+    setResult(null);
+    setError(null);
+    setDishHint("");
+    stopCamera();
+  }
+
+  const navItems: VeniceContentElement[] = [
+    { id: "scan", label: "Scan", icon: <CameraIcon size={20} /> },
+    { id: "howItWorks", label: "How it Works", icon: <SparkleIcon size={20} /> },
+  ];
+
+  const disableAnalyze = !file || loading;
 
   return (
-    <div style={{ maxWidth: 420, margin: "0 auto", background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)", minHeight: "100dvh", display: "grid", gridTemplateRows: "1fr auto" }}>
-      <div style={{ padding: 16 }}>
-        {tab === "today" && (
-          <div style={{ display: "grid", gap: 20 }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#1e293b" }}>Today</h1>
-              <div style={{ color: "#64748b", fontSize: 16, fontWeight: 400, marginTop: 4 }}>{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
-            </div>
-            <TodayCard total={calories} goal={2000} protein={protein} carbs={carbs} fat={fat} />
-            <button onClick={() => setTab("add")} style={{ 
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
-              color: "#fff", 
-              border: 0, 
-              padding: "16px 20px", 
-              borderRadius: 16, 
-              fontWeight: 600, 
-              fontSize: 16,
-              boxShadow: "0 4px 14px 0 rgba(102, 126, 234, 0.39)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              cursor: "pointer",
-              transition: "transform 0.2s ease"
-            }} onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.98)"} onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-              <AddIcon size={20} color="#fff" /> Add Food
-            </button>
-            <div style={{ background: "#ffffff", borderRadius: 16, padding: 20, border: "1px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 16px 0", fontSize: 18, fontWeight: 600, color: "#1e293b" }}>Today's Meals</h3>
-              <div style={{ textAlign: "center", color: "#94a3b8", fontSize: 16, padding: 32 }}>No meals logged yet<br/><span style={{ fontSize: 14 }}>Tap "Add Food" to get started</span></div>
-            </div>
+    <div style={{
+      minHeight: "100dvh",
+      background: "radial-gradient(120% 120% at 50% 0%, #e0e7ff 0%, #f8fafc 45%, #f1f5f9 100%)",
+    }}>
+      <div style={{
+        maxWidth: 960,
+        margin: "0 auto",
+        minHeight: "100dvh",
+        display: "grid",
+        gridTemplateRows: "auto 1fr auto",
+        padding: "32px 20px 24px",
+        gap: 24,
+      }}>
+        <header style={{ textAlign: "center" }}>
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 14px",
+            borderRadius: 999,
+            background: "rgba(79, 70, 229, 0.12)",
+            color: "#4338ca",
+            fontWeight: 600,
+            fontSize: 12,
+            letterSpacing: 0.4,
+            textTransform: "uppercase",
+          }}>
+            GenAI nutrition copilot
           </div>
-        )}
+          <h1 style={{
+            margin: "18px 0 12px",
+            fontSize: 36,
+            fontWeight: 700,
+            color: "#0f172a",
+          }}>
+            Food Calorie Counter
+          </h1>
+          <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.6 }}>
+            Capture a meal, optionally describe the dish, and let Venice Qwen 2.5 VL deliver a deep nutrition readout in seconds.
+          </p>
+        </header>
 
-        {tab === "add" && (
-          <div style={{ display: "grid", gap: 20 }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#1e293b" }}>Food Scanner</h1>
-              <div style={{ color: "#64748b", fontSize: 16, marginTop: 4 }}>Take a photo or select from gallery to analyze your food</div>
+        <main style={{ paddingBottom: 32 }}>
+          {activeSection === "scan" ? (
+            <div style={{ display: "grid", gap: 28 }}>
+              <div style={{
+                display: "grid",
+                gap: 20,
+                background: "rgba(255,255,255,0.92)",
+                borderRadius: 28,
+                padding: 28,
+                border: "1px solid rgba(79,70,229,0.12)",
+                boxShadow: "0 32px 60px -30px rgba(79, 70, 229, 0.35)",
+                backdropFilter: "blur(18px)",
+              }}>
+                <div style={{ textAlign: "center", color: "#334155", fontSize: 18, fontWeight: 600 }}>
+                  Upload a photo or open the camera to get a precision calorie breakdown.
+                </div>
+
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(129,140,248,0.08) 100%)",
+                  borderRadius: 24,
+                  padding: 20,
+                  border: "1px dashed rgba(99,102,241,0.4)",
+                  display: "grid",
+                  gap: 16,
+                  justifyItems: "center",
+                }}>
+                  {showCamera ? (
+                    <div style={{
+                      width: "100%",
+                      borderRadius: 20,
+                      overflow: "hidden",
+                      background: "#000",
+                      position: "relative",
+                      aspectRatio: "4/3",
+                    }}>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                      <canvas ref={canvasRef} style={{ display: "none" }} />
+                      {cameraLoading && (
+                        <div style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                          gap: 12,
+                          color: "#fff",
+                        }}>
+                          <div style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            border: "3px solid rgba(255,255,255,0.3)",
+                            borderTopColor: "#fff",
+                            animation: "spin 1s linear infinite",
+                          }} />
+                          Starting camera...
+                        </div>
+                      )}
+                      {!cameraLoading && !stream && (
+                        <div style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 12,
+                          color: "rgba(255,255,255,0.85)",
+                          background: "rgba(15,23,42,0.5)",
+                        }}>
+                          <CameraIcon size={36} color="rgba(255,255,255,0.8)" />
+                          Camera unavailable
+                        </div>
+                      )}
+                      <div style={{
+                        position: "absolute",
+                        bottom: 20,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        display: "flex",
+                        gap: 16,
+                        alignItems: "center",
+                      }}>
+                        <button
+                          onClick={stopCamera}
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: "50%",
+                            border: "2px solid rgba(255,255,255,0.4)",
+                            background: "rgba(15,23,42,0.7)",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          X
+                        </button>
+                        <button
+                          onClick={capturePhoto}
+                          style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: "50%",
+                            border: "5px solid rgba(255,255,255,0.75)",
+                            background: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            boxShadow: "0 12px 30px rgba(15,23,42,0.45)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ width: 58, height: 58, borderRadius: "50%", background: "#0f172a" }} />
+                        </button>
+                        <button
+                          onClick={() => document.getElementById("fileInput")?.click()}
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: "50%",
+                            border: "2px solid rgba(255,255,255,0.4)",
+                            background: "rgba(15,23,42,0.7)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <GalleryIcon size={22} color="#fff" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : image ? (
+                    <img
+                      src={image}
+                      alt="Selected meal"
+                      style={{
+                        width: "100%",
+                        borderRadius: 20,
+                        border: "1px solid rgba(148,163,184,0.4)",
+                        boxShadow: "0 20px 55px -30px rgba(15,23,42,0.8)",
+                        maxHeight: 360,
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: "100%",
+                      minHeight: 220,
+                      borderRadius: 20,
+                      background: "rgba(248,250,252,0.8)",
+                      border: "1px dashed rgba(148,163,184,0.6)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#64748b",
+                      gap: 12,
+                    }}>
+                      <CameraIcon size={34} color="#94a3b8" />
+                      <div style={{ fontWeight: 500 }}>No photo yet</div>
+                      <div style={{ fontSize: 13 }}>Upload or open the camera to begin</div>
+                    </div>
+                  )}
+
+                  {!showCamera && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center" }}>
+                      <button
+                        onClick={() => document.getElementById("fileInput")?.click()}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "18px 26px",
+                          borderRadius: 20,
+                          border: "1px solid rgba(148,163,184,0.5)",
+                          background: "rgba(255,255,255,0.8)",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          color: "#1e293b",
+                          minWidth: 140,
+                        }}
+                      >
+                        <GalleryIcon size={28} color="#6366f1" />
+                        Upload Photo
+                      </button>
+                      <button
+                        onClick={startCamera}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "18px 26px",
+                          borderRadius: 20,
+                          border: 0,
+                          background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          color: "#fff",
+                          minWidth: 140,
+                          boxShadow: "0 18px 35px -20px rgba(99,102,241,0.9)",
+                        }}
+                      >
+                        <CameraIcon size={28} color="#fff" />
+                        Use Camera
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label htmlFor="dishHint" style={{ fontWeight: 600, color: "#334155" }}>
+                    Optional dish description
+                  </label>
+                  <textarea
+                    id="dishHint"
+                    value={dishHint}
+                    onChange={(event) => setDishHint(event.target.value)}
+                    placeholder="Add the dish name, ingredients, cuisine, or preparation details to guide the AI."
+                    rows={3}
+                    style={{
+                      resize: "vertical",
+                      minHeight: 72,
+                      borderRadius: 16,
+                      border: "1px solid rgba(148,163,184,0.55)",
+                      padding: "14px 16px",
+                      fontFamily: "inherit",
+                      fontSize: 14,
+                      color: "#0f172a",
+                      background: "rgba(248,250,252,0.9)",
+                    }}
+                    disabled={loading}
+                  />
+                  <div style={{ fontSize: 13, color: "#64748b" }}>
+                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps Qwen 2.5 VL refine macro estimates.
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                  <button
+                    onClick={onAnalyze}
+                    disabled={disableAnalyze}
+                    style={{
+                      flex: 1,
+                      minWidth: 160,
+                      border: 0,
+                      borderRadius: 18,
+                      padding: "16px 24px",
+                      fontSize: 16,
+                      fontWeight: 600,
+                      color: "#fff",
+                      background: disableAnalyze
+                        ? "linear-gradient(135deg, #cbd5f5 0%, #c4b5fd 100%)"
+                        : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                      cursor: disableAnalyze ? "not-allowed" : "pointer",
+                      boxShadow: disableAnalyze ? "none" : "0 25px 50px -25px rgba(79,70,229,0.8)",
+                      transition: "transform 0.2s ease",
+                    }}
+                  >
+                    {loading ? "Analyzing with Venice..." : "Analyze meal"}
+                  </button>
+                  <button
+                    onClick={onClear}
+                    disabled={loading}
+                    style={{
+                      padding: "16px 24px",
+                      borderRadius: 18,
+                      border: "1px solid rgba(148,163,184,0.5)",
+                      background: "rgba(255,255,255,0.8)",
+                      color: "#475569",
+                      fontWeight: 500,
+                      cursor: loading ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                <input id="fileInput" type="file" accept="image/*" onChange={onSelect} style={{ display: "none" }} />
+              </div>
+
+              {loading && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  justifyContent: "center",
+                  color: "#4f46e5",
+                  fontWeight: 600,
+                }}>
+                  <div style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    border: "3px solid rgba(99,102,241,0.25)",
+                    borderTopColor: "#4f46e5",
+                    animation: "spin 1s linear infinite",
+                  }} />
+                  Generating a detailed nutrition profile...
+                </div>
+              )}
+
+              {error && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#b91c1c",
+                  padding: "14px 18px",
+                  borderRadius: 18,
+                }}>
+                  {error}
+                </div>
+              )}
+
+              {result && (
+                <div style={{
+                  background: "linear-gradient(135deg, #f8f5ff 0%, #eef2ff 100%)",
+                  borderRadius: 28,
+                  padding: 28,
+                  border: "1px solid rgba(99,102,241,0.18)",
+                  boxShadow: "0 40px 70px -40px rgba(79,70,229,0.6)",
+                }}>
+                  <NutritionSummaryView data={result} />
+                </div>
+              )}
             </div>
-            
-            {showCamera ? (
-              <div style={{ 
-                background: "#000", 
-                borderRadius: 24, 
-                overflow: "hidden", 
-                position: "relative",
-                aspectRatio: "4/3",
+          ) : (
+            <div style={{
+              display: "grid",
+              gap: 32,
+              background: "rgba(255,255,255,0.94)",
+              borderRadius: 28,
+              padding: 32,
+              border: "1px solid rgba(148,163,184,0.2)",
+              boxShadow: "0 32px 60px -36px rgba(15, 23, 42, 0.35)",
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 30, fontWeight: 700, color: "#0f172a" }}>
+                  How the GenAI nutrition engine works
+                </h2>
+                <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
+                  The app pairs computer vision with the Venice-hosted Qwen 2.5 VL 72B (D) model to deliver reliable food intelligence without manual tracking.
+                </p>
+              </div>
+
+              <div style={{
+                display: "grid",
+                gap: 20,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}>
+                {[{
+                  title: "1. Capture & enrich",
+                  description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
+                }, {
+                  title: "2. Vision + reasoning",
+                  description: "Qwen 2.5 VL cross-checks the pixels with your hint, estimating components, portion size, and macro distribution.",
+                }, {
+                  title: "3. Explainable output",
+                  description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",
+                }].map((card, idx) => (
+                  <div
+                    key={card.title}
+                    style={{
+                      background: "linear-gradient(135deg, rgba(99,102,241,0.16) 0%, rgba(129,140,248,0.08) 100%)",
+                      borderRadius: 24,
+                      padding: 24,
+                      border: "1px solid rgba(99,102,241,0.15)",
+                      color: "#1e293b",
+                      boxShadow: "0 18px 36px -28px rgba(99,102,241,0.5)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>Step {idx + 1}</div>
+                    <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 10 }}>{card.title}</div>
+                    <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6 }}>{card.description}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{
+                display: "grid",
+                gap: 16,
+                background: "linear-gradient(135deg, #0f172a 0%, #312e81 100%)",
+                color: "#e0e7ff",
+                borderRadius: 24,
+                padding: 28,
+              }}>
+                <h3 style={{ margin: 0, fontSize: 22 }}>Why it feels like magic</h3>
+                <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 10 }}>
+                  <li>Multi-angle vision cues let Qwen estimate volumes and textures beyond a simple label lookup.</li>
+                  <li>Schema-constrained responses ensure tidy JSON you can plug into trackers or analytics.</li>
+                  <li>AI highlights uncertainties, allergens, and portion logic so you know when to double-check.</li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <nav style={{
+          display: "flex",
+          borderTop: "1px solid rgba(148,163,184,0.35)",
+          paddingTop: 12,
+          gap: 12,
+          justifyContent: "center",
+          flexWrap: "wrap",
+        }}>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveSection(item.id)}
+              style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
-              }}>
-                <video 
-                  ref={videoRef} 
-                  autoPlay 
-                  playsInline 
-                  muted
-                  style={{ 
-                    width: "100%", 
-                    height: "100%", 
-                    objectFit: "cover"
-                  }}
-                />
-                <canvas ref={canvasRef} style={{ display: "none" }} />
-                
-                {/* Camera controls overlay */}
-                <div style={{ 
-                  position: "absolute", 
-                  bottom: 20, 
-                  left: "50%", 
-                  transform: "translateX(-50%)", 
-                  display: "flex", 
-                  gap: 20, 
-                  alignItems: "center" 
-                }}>
-                  <button onClick={stopCamera} style={{
-                    width: 50, height: 50, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "#fff", border: "2px solid rgba(255,255,255,0.3)", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, backdropFilter: "blur(10px)"
-                  }}>✕</button>
-                  
-                  <button onClick={capturePhoto} style={{
-                    width: 70, height: 70, borderRadius: "50%", background: "#fff", color: "#000", border: "4px solid rgba(255,255,255,0.8)", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
-                  }}>
-                    <div style={{ width: 50, height: 50, borderRadius: "50%", background: "#000" }}></div>
-                  </button>
-                  
-                  <button onClick={() => document.getElementById("fileInput")?.click()} style={{
-                    width: 50, height: 50, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "#fff", border: "2px solid rgba(255,255,255,0.3)", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(10px)"
-                  }}>
-                    <GalleryIcon size={20} color="#fff" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ 
-                background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)", 
-                color: "#fff", 
-                padding: 32, 
-                borderRadius: 24, 
-                display: "flex", 
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 40,
-                boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)"
-              }}>
-                <button onClick={() => document.getElementById("fileInput")?.click()} style={{ 
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 12,
-                  background: "rgba(255,255,255,0.1)", 
-                  color: "#fff", 
-                  border: 0, 
-                  cursor: "pointer",
-                  padding: 20,
-                  borderRadius: 16,
-                  transition: "all 0.2s ease",
-                  minWidth: 120
-                }} onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}>
-                  <GalleryIcon size={32} color="#fff" />
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>Upload Photo</span>
-                </button>
-                
-                <button onClick={startCamera} style={{ 
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 12,
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
-                  color: "#fff", 
-                  border: 0, 
-                  cursor: "pointer",
-                  padding: 20,
-                  borderRadius: 16,
-                  boxShadow: "0 8px 20px rgba(102, 126, 234, 0.4)", 
-                  transition: "all 0.2s ease",
-                  minWidth: 120
-                }} onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}>
-                  <CameraIcon size={32} color="#fff" />
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>Take Photo</span>
-                </button>
-              </div>
-            )}
-            
-            <input id="fileInput" type="file" accept="image/*" onChange={onSelect} style={{ display: "none" }} />
-            {image && !showCamera && <img src={image} alt="preview" style={{ width: "100%", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }} />}
-            <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={onAnalyze} disabled={!file || loading} style={{ 
-                background: loading ? "#94a3b8" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
-                color: "#fff", 
-                border: 0, 
-                padding: "14px 20px", 
-                borderRadius: 16, 
+                gap: 10,
+                padding: "10px 18px",
+                borderRadius: 18,
+                border: item.id === activeSection
+                  ? "1px solid rgba(79,70,229,0.4)"
+                  : "1px solid rgba(148,163,184,0.4)",
+                background: item.id === activeSection
+                  ? "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(129,140,248,0.1) 100%)"
+                  : "rgba(255,255,255,0.9)",
+                color: item.id === activeSection ? "#4338ca" : "#475569",
                 fontWeight: 600,
-                fontSize: 16,
-                flex: 1,
-                cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: loading ? "none" : "0 4px 14px 0 rgba(102, 126, 234, 0.39)",
-                transition: "all 0.2s ease"
-              }}>
-                {loading ? "Analyzing..." : "Analyze Image"}
-              </button>
-              <button onClick={() => { setFile(null); setImage(null); setResult(null); setError(null); stopCamera(); }} disabled={loading} style={{ 
-                border: "1px solid #e2e8f0", 
-                background: "#fff",
-                padding: "14px 20px", 
-                borderRadius: 16, 
-                fontWeight: 500,
-                color: "#64748b",
-                cursor: loading ? "not-allowed" : "pointer"
-              }}>Clear</button>
-            </div>
-            {error && <div style={{ color: "#ef4444", background: "#fef2f2", padding: 12, borderRadius: 12, border: "1px solid #fecaca" }}>{error}</div>}
-            {result && <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}><NutritionSummaryView data={result} /></div>}
-          </div>
-        )}
-
-        {tab === "history" && (
-          <div style={{ display: "grid", gap: 20 }}>
-            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#1e293b" }}>History</h1>
-            <div style={{ background: "#ffffff", borderRadius: 16, padding: 32, border: "1px solid #e2e8f0", textAlign: "center" }}>
-              <HistoryIcon size={48} color="#cbd5e1" />
-              <div style={{ color: "#94a3b8", fontSize: 16, marginTop: 16 }}>No meals logged yet</div>
-              <div style={{ color: "#cbd5e1", fontSize: 14, marginTop: 8 }}>Your meal history will appear here</div>
-            </div>
-          </div>
-        )}
-
-        {tab === "profile" && (
-          <div style={{ display: "grid", gap: 20 }}>
-            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#1e293b" }}>Profile</h1>
-            <div style={{ background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, boxShadow: "0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}>
-              <div style={{ fontWeight: 600, fontSize: 18, color: "#1e293b", marginBottom: 16 }}>Today's Progress</div>
-              <TodayCard total={calories} goal={2000} protein={protein} carbs={carbs} fat={fat} />
-            </div>
-            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, boxShadow: "0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}>
-              <div style={{ fontWeight: 600, fontSize: 18, color: "#1e293b", marginBottom: 16 }}>Daily Goals</div>
-              <div style={{ display: "grid", gap: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, background: "#f8fafc", borderRadius: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <FlameIcon size={20} color="#ef4444" />
-                    <span style={{ fontWeight: 500, color: "#374151" }}>Calorie Goal</span>
-                  </div>
-                  <span style={{ color: "#667eea", fontWeight: 600 }}>2000 cal</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, background: "#f8fafc", borderRadius: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <MeatIcon size={20} color="#ef4444" />
-                    <span style={{ fontWeight: 500, color: "#374151" }}>Protein Goal</span>
-                  </div>
-                  <span style={{ color: "#667eea", fontWeight: 600 }}>150g</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, boxShadow: "0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}>
-              <div style={{ fontWeight: 600, fontSize: 18, color: "#1e293b", marginBottom: 16 }}>About</div>
-              <div style={{ display: "grid", gap: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "#f0f9ff", borderRadius: 12, border: "1px solid #bae6fd" }}>
-                  <div style={{ width: 32, height: 32, background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✨</div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "#0c4a6e" }}>AI-Powered Analysis</div>
-                    <div style={{ color: "#0369a1", fontSize: 14 }}>Uses Venice AI to analyze your food photos</div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "#f0fdf4", borderRadius: 12, border: "1px solid #bbf7d0" }}>
-                  <div style={{ width: 32, height: 32, background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CameraIcon size={16} color="#fff" />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "#14532d" }}>Photo Recognition</div>
-                    <div style={{ color: "#166534", fontSize: 14 }}>Take a photo and get instant calorie estimates</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {React.cloneElement(item.icon, {
+                  color: item.id === activeSection ? "#4338ca" : "#475569",
+                })}
+              </span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
-
-      <nav style={{ 
-        display: "flex", 
-        borderTop: "1px solid #e2e8f0", 
-        background: "rgba(255, 255, 255, 0.95)", 
-        backdropFilter: "blur(10px)",
-        boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.1)"
-      }}>
-        {[
-          { id: "today", label: "Today", icon: <CalendarIcon size={20} /> },
-          { id: "add", label: "Add Food", icon: <AddIcon size={20} /> },
-          { id: "history", label: "History", icon: <HistoryIcon size={20} /> },
-          { id: "profile", label: "Profile", icon: <UserIcon size={20} /> },
-        ].map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id as any)} style={{ 
-            flex: 1, 
-            padding: "12px 8px", 
-            border: 0, 
-            background: "transparent", 
-            color: tab === t.id ? "#667eea" : "#64748b", 
-            fontWeight: tab === t.id ? 600 : 500,
-            fontSize: 12,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 4,
-            cursor: "pointer",
-            transition: "all 0.2s ease",
-            position: "relative"
-          }}>
-            <div style={{ opacity: tab === t.id ? 1 : 0.6 }}>{React.cloneElement(t.icon, { color: tab === t.id ? "#667eea" : "#64748b" })}</div>
-            {t.label}
-            {tab === t.id && <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, background: "linear-gradient(90deg, #667eea 0%, #764ba2 100%)", borderRadius: "0 0 999px 999px" }} />}
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }
-
-

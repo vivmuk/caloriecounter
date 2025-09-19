@@ -3,6 +3,13 @@ export type NutritionMacro = {
   calories: number;
 };
 
+export type NutritionAnalysis = {
+  visualObservations?: string[];
+  portionEstimate?: string;
+  confidenceNarrative?: string;
+  cautions?: string[];
+};
+
 export type NutritionSummary = {
   title: string;
   confidence: number; // 0..1
@@ -25,14 +32,22 @@ export type NutritionSummary = {
     name: string;
     quantity: string;
     calories: number;
+    massGrams?: number;
   }>;
   notes?: string[];
+  analysis?: NutritionAnalysis;
+};
+
+export type AnalyzeImageOptions = {
+  userDishDescription?: string;
 };
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 const VENICE_PROXY_URL = "/api/venice"; // Netlify function proxy for production
-const VENICE_MODEL = "mistral-31-24b"; // supports vision per Venice model list
+const VENICE_MODEL = "qwen2.5-vl-72b-instruct"; // Qwen 2.5 VL 72B (D)
+
+const SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a photo of food (and optional user dish hints), output a single JSON object that follows the provided schema exactly. Provide a realistic breakdown with portion sizing, macro and micro nutrients, and highlight any assumptions or cautions in notes. Avoid prose outside JSON.`;
 
 async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
@@ -59,8 +74,13 @@ async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85
   return dataUrl;
 }
 
-export async function analyzeImageWithVenice(file: File): Promise<NutritionSummary> {
+type VeniceMessageContent =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
+  const userDishDescription = options.userDishDescription?.trim();
 
   const schema = {
     type: "object",
@@ -129,31 +149,63 @@ export async function analyzeImageWithVenice(file: File): Promise<NutritionSumma
           properties: {
             name: { type: "string" },
             quantity: { type: "string" },
-            calories: { type: "number" }
+            calories: { type: "number" },
+            massGrams: { type: "number" }
           }
         }
       },
-      notes: { type: "array", items: { type: "string" } }
+      notes: { type: "array", items: { type: "string" } },
+      analysis: {
+        type: "object",
+        properties: {
+          visualObservations: { type: "array", items: { type: "string" } },
+          portionEstimate: { type: "string" },
+          confidenceNarrative: { type: "string" },
+          cautions: { type: "array", items: { type: "string" } }
+        }
+      }
     }
   } as const;
 
+  const coreInstruction = [
+    "You must respond with strict JSON conforming to the schema.",
+    "Estimate realistic portion sizes and mass in grams when possible.",
+    "List distinct food components inside items[].",
+    "Include at least two actionable insights in notes[].",
+    "Use analysis.visualObservations to capture key visual cues and assumptions.",
+    "Use analysis.portionEstimate to summarise serving size logic.",
+    "Use analysis.confidenceNarrative to explain the confidence score.",
+    "Use analysis.cautions for allergen, diet, or measurement cautions."
+  ].join(" ");
+
+  const userContent: VeniceMessageContent[] = [];
+  if (userDishDescription) {
+    userContent.push({
+      type: "text",
+      text: `User provided dish hint: "${userDishDescription}". Align the assessment with this context while verifying against the image.`
+    });
+  }
+  userContent.push({
+    type: "text",
+    text: `${coreInstruction} Return only JSON without markdown.`
+  });
+  userContent.push({
+    type: "image_url",
+    image_url: { url: imageDataUrl }
+  });
+
   const body = {
     model: VENICE_MODEL,
-    temperature: 0.2,
+    temperature: 0.15,
+    response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
     messages: [
       {
+        role: "system",
+        content: [{ type: "text", text: SYSTEM_PROMPT }]
+      },
+      {
         role: "user",
-        content: [
-          {
-            type: "text",
-            text:
-              "You are a nutritionist. Analyze the food in the image and respond ONLY with a strict JSON object matching this schema: {title:string, confidence:number (0..1), servingDescription:string, totalCalories:number, macros:{protein:{grams:number, calories:number}, carbs:{grams:number, calories:number, fiber?:number, sugar?:number}, fat:{grams:number, calories:number, saturated?:number, unsaturated?:number}}, micronutrients?:{sodiumMg?:number,potassiumMg?:number,cholesterolMg?:number,calciumMg?:number,ironMg?:number,vitaminCMg?:number}, items?:[{name:string,quantity:string,calories:number}], notes?:string[]}. No prose or code fences."
-          },
-          {
-            type: "image_url",
-            image_url: { url: imageDataUrl }
-          }
-        ]
+        content: userContent
       }
     ]
   } as const;
@@ -202,5 +254,3 @@ export async function analyzeImageWithVenice(file: File): Promise<NutritionSumma
   }
   return parsed;
 }
-
-
