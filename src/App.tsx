@@ -1,5 +1,5 @@
 import * as React from "react";
-import { analyzeImageWithVenice, type NutritionSummary } from "../app/lib/venice";
+import { analyzeImageWithVenice, VENICE_VISION_MODELS, type NutritionSummary, type VeniceVisionModelId } from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
@@ -18,8 +18,11 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
+  const [modelId, setModelId] = React.useState<VeniceVisionModelId>(VENICE_VISION_MODELS[0].id);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  const activeModel = React.useMemo(() => VENICE_VISION_MODELS.find((entry) => entry.id === modelId) ?? VENICE_VISION_MODELS[0], [modelId]);
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -134,6 +137,7 @@ export default function App() {
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
+        model: modelId,
       });
       setResult(summary);
     } catch (err) {
@@ -198,7 +202,7 @@ export default function App() {
             Food Calorie Counter
           </h1>
           <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.6 }}>
-            Capture a meal, optionally describe the dish, and let Venice Qwen 2.5 VL deliver a deep nutrition readout in seconds.
+            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition readout in seconds.
           </p>
         </header>
 
@@ -446,7 +450,53 @@ export default function App() {
                     disabled={loading}
                   />
                   <div style={{ fontSize: 13, color: "#64748b" }}>
-                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps Qwen 2.5 VL refine macro estimates.
+                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeModel.label} refine macro estimates.
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <label style={{ fontWeight: 600, color: "#334155" }}>
+                    Vision model
+                  </label>
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {VENICE_VISION_MODELS.map((candidate) => {
+                      const isActive = candidate.id === modelId;
+                      return (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() => setModelId(candidate.id)}
+                          disabled={loading}
+                          aria-pressed={isActive}
+                          style={{
+                            textAlign: "left",
+                            display: "grid",
+                            gap: 6,
+                            padding: "16px 18px",
+                            borderRadius: 18,
+                            border: isActive ? "1px solid rgba(79,70,229,0.65)" : "1px solid rgba(148,163,184,0.4)",
+                            background: isActive
+                              ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.1) 100%)"
+                              : "rgba(255,255,255,0.85)",
+                            color: "#1e293b",
+                            cursor: loading ? "not-allowed" : "pointer",
+                            boxShadow: isActive ? "0 18px 40px -28px rgba(79,70,229,0.65)" : "none",
+                            transition: "border 0.2s ease, box-shadow 0.2s ease",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700 }}>{candidate.label}</span>
+                            <span style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: isActive ? "#4338ca" : "#64748b" }}>
+                              {isActive ? "Active" : "Tap to select"}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 14, color: "#475569" }}>{candidate.description}</div>
+                          <div style={{ fontSize: 12, color: "#6366f1", fontWeight: 600 }}>
+                            {candidate.strengths}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -471,7 +521,7 @@ export default function App() {
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    {loading ? "Analyzing with Venice..." : "Analyze meal"}
+                    {loading ? `Analyzing with ${activeModel.label}...` : "Analyze meal"}
                   </button>
                   <button
                     onClick={onClear}
@@ -553,7 +603,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app pairs computer vision with the Venice-hosted Qwen 2.5 VL 72B (D) model to deliver reliable food intelligence without manual tracking.
+                  The app pairs computer vision with Venice-hosted vision models (Qwen 2.5 VL, Mistral 3.x) so you can choose the right analyst for every plate.
                 </p>
               </div>
 
@@ -567,7 +617,7 @@ export default function App() {
                   description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
                 }, {
                   title: "2. Vision + reasoning",
-                  description: "Qwen 2.5 VL cross-checks the pixels with your hint, estimating components, portion size, and macro distribution.",
+                  description: `Vision models like ${activeModel.label} cross-check the pixels with your hints, estimating components, portion size, and macro distribution.`,
                 }, {
                   title: "3. Explainable output",
                   description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",

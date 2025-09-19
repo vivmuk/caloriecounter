@@ -38,14 +38,46 @@ export type NutritionSummary = {
   analysis?: NutritionAnalysis;
 };
 
+export type VeniceVisionModelId = "qwen-2.5-vl" | "mistral-31-24b" | "mistral-32-24b";
+
+export type VeniceVisionModelConfig = {
+  id: VeniceVisionModelId;
+  label: string;
+  description: string;
+  strengths: string;
+};
+
 export type AnalyzeImageOptions = {
   userDishDescription?: string;
+  model?: VeniceVisionModelId;
 };
+
+export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
+  {
+    id: "qwen-2.5-vl",
+    label: "Qwen 2.5 VL 72B",
+    description: "Flagship multimodal reasoning model from Qwen",
+    strengths: "Balanced macro reasoning, strong portion estimates, vivid descriptions",
+  },
+  {
+    id: "mistral-31-24b",
+    label: "Mistral 3.1 24B Vision",
+    description: "Mistral Small 24B with Venice vision tuning",
+    strengths: "Fast turnaround with reliable ingredient detection and calorie lookup",
+  },
+  {
+    id: "mistral-32-24b",
+    label: "Mistral 3.2 24B Vision (Beta)",
+    description: "Latest Venice build of the Mistral 3.2 vision stack",
+    strengths: "Sharper lighting adjustments, better handling of complex plating",
+  },
+];
+
+const DEFAULT_MODEL: VeniceVisionModelId = VENICE_VISION_MODELS[0].id;
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 const VENICE_PROXY_URL = "/api/venice"; // Netlify function proxy for production
-const VENICE_MODEL = "qwen2.5-vl-72b-instruct"; // Qwen 2.5 VL 72B (D)
 
 const SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a photo of food (and optional user dish hints), output a single JSON object that follows the provided schema exactly. Provide a realistic breakdown with portion sizing, macro and micro nutrients, and highlight any assumptions or cautions in notes. Avoid prose outside JSON.`;
 
@@ -81,6 +113,7 @@ type VeniceMessageContent =
 export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
+  const model = options.model ?? DEFAULT_MODEL;
 
   const schema = {
     type: "object",
@@ -195,7 +228,7 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   });
 
   const body = {
-    model: VENICE_MODEL,
+    model,
     temperature: 0.15,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
     messages: [
