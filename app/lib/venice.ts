@@ -38,7 +38,7 @@ export type NutritionSummary = {
   analysis?: NutritionAnalysis;
 };
 
-export type VeniceVisionModelId = "qwen-2.5-vl" | "mistral-31-24b" | "mistral-32-24b";
+export type VeniceVisionModelId = "qwen-2.5-vl";
 export type VeniceTextModelId = "qwen3-235b" | "qwen-2.5-qwq-32b" | "llama-3.1-405b";
 
 export type VeniceVisionModelConfig = {
@@ -68,18 +68,6 @@ export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
     label: "Qwen 2.5 VL 72B",
     description: "72B: excellent food identification and portion estimation",
     badge: "Best overall",
-  },
-  {
-    id: "mistral-31-24b",
-    label: "Venice Medium",
-    description: "24B: fast food detection with good accuracy",
-    badge: "Fast",
-  },
-  {
-    id: "mistral-32-24b",
-    label: "Venice Medium 1.1",
-    description: "24B: latest vision model for detailed food analysis",
-    badge: "Beta",
   },
 ];
 
@@ -206,11 +194,12 @@ async function makeVeniceRequest(body: any): Promise<Response> {
 
 // Stage 1: Food identification using vision model
 async function identifyFoodItems(imageDataUrl: string, userDishDescription?: string, visionModel: VeniceVisionModelId = DEFAULT_VISION_MODEL): Promise<string> {
-  const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
-  const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
+  // Only use Qwen 2.5 VL
+  const selectedVisionModel: VeniceVisionModelId = "qwen-2.5-vl";
 
-  // Use standard data URL format (OpenAI compatible)
-  console.log("Using standard data URL format, length:", imageDataUrl.length);
+  // Extract base64 data without data URL prefix
+  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+  console.log("Using base64 format with Qwen 2.5 VL, length:", base64Data.length);
 
   const userContent: VeniceMessageContent[] = [];
   if (userDishDescription) {
@@ -224,10 +213,10 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
     text: "Analyze this food image comprehensively. Describe: 1) All visible food items with specific names and preparation methods, 2) Portion sizes with visual reference points (plate size, utensils, etc.), 3) Cooking techniques evident from appearance (grilled, fried, steamed, etc.), 4) Sauce types, seasonings, and garnishes, 5) Texture and doneness indicators, 6) Plating style and presentation details, 7) Any accompaniments or side dishes. Be extremely detailed and specific."
   });
   
-  // Standard OpenAI-compatible format: full data URL
+  // Base64 format for Qwen
   userContent.push({
     type: "image_url",
-    image_url: { url: imageDataUrl }
+    image_url: { url: base64Data }
   });
 
   const body = {
@@ -402,8 +391,8 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
 
 // Single-stage fallback (original approach)
 async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: string, visionModel: VeniceVisionModelId = DEFAULT_VISION_MODEL): Promise<NutritionSummary> {
-  const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
-  const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
+  // Only use Qwen 2.5 VL
+  const selectedVisionModel: VeniceVisionModelId = "qwen-2.5-vl";
 
   const schema = {
     type: "object",
@@ -501,6 +490,9 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
     "Use analysis.cautions for allergen, diet, or measurement cautions."
   ].join(" ");
 
+  // Extract base64 data for single-stage fallback
+  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+  
   const userContent: VeniceMessageContent[] = [];
   if (userDishDescription) {
     userContent.push({
@@ -514,7 +506,7 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
   });
   userContent.push({
     type: "image_url",
-    image_url: { url: imageDataUrl }
+    image_url: { url: base64Data }
   });
 
   const body = {
