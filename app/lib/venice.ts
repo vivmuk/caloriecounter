@@ -39,7 +39,7 @@ export type NutritionSummary = {
 };
 
 export type VeniceVisionModelId = "qwen-2.5-vl" | "mistral-31-24b" | "mistral-32-24b";
-export type VeniceTextModelId = "qwen3-235b" | "qwen-2.5-qwq-32b" | "llama-3.3-70b";
+export type VeniceTextModelId = "qwen3-235b" | "qwen-2.5-qwq-32b" | "llama-3.1-405b";
 
 export type VeniceVisionModelConfig = {
   id: VeniceVisionModelId;
@@ -97,10 +97,10 @@ export const VENICE_TEXT_MODELS: VeniceTextModelConfig[] = [
     badge: "Smart",
   },
   {
-    id: "llama-3.3-70b",
-    label: "Llama 3.3 70B",
-    description: "70B: reliable nutrition calculations with function calling",
-    badge: "Balanced",
+    id: "llama-3.1-405b",
+    label: "Llama 3.1 405B",
+    description: "405B: most intelligent model for complex nutritional analysis",
+    badge: "Most Intelligent",
   },
 ];
 
@@ -115,7 +115,7 @@ const VISION_SYSTEM_PROMPT = `You are a food identification specialist. Analyze 
 
 const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a detailed description of food items and portions, calculate precise macro and micronutrient content. Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 1.0): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -194,93 +194,60 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
   const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
 
-  // Debug: log image data format
-  console.log("Image data URL length:", imageDataUrl.length);
-  console.log("Image data URL prefix:", imageDataUrl.substring(0, 50));
-  
+  // Extract base64 data without data URL prefix (Venice-specific format)
   const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-  console.log("Base64 data length:", base64Data.length);
+  console.log("Using Venice-specific base64 format, length:", base64Data.length);
 
-  // Try different image formats for Venice API
-  const imageFormats = [
-    {
-      name: "Standard data URL (OpenAI compatible)",
-      imageContent: {
-        type: "image_url" as const,
-        image_url: { url: imageDataUrl }
-      }
-    },
-    {
-      name: "Base64 only (Venice specific)",
-      imageContent: {
-        type: "image_url" as const,
-        image_url: { url: base64Data }
-      }
-    },
-    {
-      name: "Reconstructed data URL",
-      imageContent: {
-        type: "image_url" as const,
-        image_url: { url: `data:image/jpeg;base64,${base64Data}` }
-      }
-    }
-  ];
+  const userContent: VeniceMessageContent[] = [];
+  if (userDishDescription) {
+    userContent.push({
+      type: "text",
+      text: `User provided dish hint: "${userDishDescription}". Use this to guide your analysis.`
+    });
+  }
+  userContent.push({
+    type: "text",
+    text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
+  });
+  
+  // Venice-specific format: base64 string only (no data URL prefix)
+  userContent.push({
+    type: "image_url",
+    image_url: { url: base64Data }
+  });
 
-  for (const format of imageFormats) {
-    try {
-      console.log(`Trying format: ${format.name}`);
-      
-      const userContent: VeniceMessageContent[] = [];
-      if (userDishDescription) {
-        userContent.push({
-          type: "text",
-          text: `User provided dish hint: "${userDishDescription}". Use this to guide your analysis.`
-        });
+  const body = {
+    model: selectedVisionModel,
+    temperature: 0.1,
+    messages: [
+      {
+        role: "system",
+        content: [{ type: "text", text: VISION_SYSTEM_PROMPT }]
+      },
+      {
+        role: "user",
+        content: userContent
       }
-      userContent.push({
-        type: "text",
-        text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
-      });
-      userContent.push(format.imageContent);
+    ]
+  };
+  
+  console.log("Vision request model:", selectedVisionModel);
+  console.log("Vision request body size:", JSON.stringify(body).length);
 
-      const body = {
-        model: selectedVisionModel,
-        temperature: 0.1,
-        messages: [
-          {
-            role: "system",
-            content: [{ type: "text", text: VISION_SYSTEM_PROMPT }]
-          },
-          {
-            role: "user",
-            content: userContent
-          }
-        ]
-      };
-      
-      console.log("Vision request model:", selectedVisionModel);
-      console.log("Vision request body size:", JSON.stringify(body).length);
-
-      const res = await makeVeniceRequest(body);
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      
-      if (content) {
-        console.log(`✅ Success with format: ${format.name}`);
-        return typeof content === "string" ? content : JSON.stringify(content);
-      }
-    } catch (error) {
-      console.warn(`❌ Failed with format: ${format.name}`, error);
-      // Continue to next format
-    }
+  const res = await makeVeniceRequest(body);
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  
+  if (!content) {
+    throw new Error("No food identification returned from Venice vision model");
   }
   
-  throw new Error("All image formats failed - Venice vision model may not support image input");
+  return typeof content === "string" ? content : JSON.stringify(content);
 }
 
 // Stage 2: Nutrition calculation using text model
 async function calculateNutrition(foodDescription: string, textModel: VeniceTextModelId = DEFAULT_TEXT_MODEL): Promise<NutritionSummary> {
-  const supportedTextModels: VeniceTextModelId[] = ["qwen3-235b", "qwen-2.5-qwq-32b", "llama-3.3-70b"];
+  const supportedTextModels: VeniceTextModelId[] = ["qwen3-235b", "qwen-2.5-qwq-32b", "llama-3.1-405b"];
   const selectedTextModel: VeniceTextModelId = supportedTextModels.includes(textModel) ? textModel : DEFAULT_TEXT_MODEL;
 
   const schema = {
