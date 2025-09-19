@@ -209,9 +209,8 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
   const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
 
-  // Extract base64 data without data URL prefix (Venice-specific format)
-  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-  console.log("Using Venice-specific base64 format, length:", base64Data.length);
+  // Use standard data URL format (OpenAI compatible)
+  console.log("Using standard data URL format, length:", imageDataUrl.length);
 
   const userContent: VeniceMessageContent[] = [];
   if (userDishDescription) {
@@ -225,10 +224,10 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
     text: "Analyze this food image comprehensively. Describe: 1) All visible food items with specific names and preparation methods, 2) Portion sizes with visual reference points (plate size, utensils, etc.), 3) Cooking techniques evident from appearance (grilled, fried, steamed, etc.), 4) Sauce types, seasonings, and garnishes, 5) Texture and doneness indicators, 6) Plating style and presentation details, 7) Any accompaniments or side dishes. Be extremely detailed and specific."
   });
   
-  // Venice-specific format: base64 string only (no data URL prefix)
+  // Standard OpenAI-compatible format: full data URL
   userContent.push({
     type: "image_url",
-    image_url: { url: base64Data }
+    image_url: { url: imageDataUrl }
   });
 
   const body = {
