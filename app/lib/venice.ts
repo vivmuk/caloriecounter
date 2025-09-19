@@ -111,9 +111,24 @@ const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 const VENICE_PROXY_URL = "/api/venice"; // Netlify function proxy for production
 
-const VISION_SYSTEM_PROMPT = `You are a food identification specialist. Analyze the image and identify all food items, estimate portions, and describe what you see. Be detailed about ingredients, cooking methods, and serving sizes.`;
+const VISION_SYSTEM_PROMPT = `You are a food identification specialist. Analyze the image thoroughly and provide detailed observations about:
+- Food items and their preparation methods
+- Portion sizes and visual cues for estimation
+- Cooking techniques and ingredients visible
+- Plating style and presentation details
+- Any garnishes, sauces, or accompaniments
+- Texture, color, and visual indicators of freshness
+Be comprehensive and specific in your descriptions.`;
 
-const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a detailed description of food items and portions, calculate precise macro and micronutrient content. Output a single JSON object that follows the provided schema exactly.`;
+const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Calculate precise nutritional content and provide comprehensive analysis including:
+- Detailed macro and micronutrient breakdowns
+- Confidence assessment with specific reasoning
+- Visual observations that informed your analysis
+- Portion estimation methodology and logic
+- Potential allergens and dietary considerations
+- Cooking method impacts on nutrition
+- Measurement assumptions and limitations
+Output a single JSON object that follows the provided schema exactly.`;
 
 async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 1.0): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
@@ -207,7 +222,7 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   }
   userContent.push({
     type: "text",
-    text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
+    text: "Analyze this food image comprehensively. Describe: 1) All visible food items with specific names and preparation methods, 2) Portion sizes with visual reference points (plate size, utensils, etc.), 3) Cooking techniques evident from appearance (grilled, fried, steamed, etc.), 4) Sauce types, seasonings, and garnishes, 5) Texture and doneness indicators, 6) Plating style and presentation details, 7) Any accompaniments or side dishes. Be extremely detailed and specific."
   });
   
   // Venice-specific format: base64 string only (no data URL prefix)
@@ -337,13 +352,14 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
 
   const coreInstruction = [
     "You must respond with strict JSON conforming to the schema.",
-    "Calculate realistic portion sizes and mass in grams based on the food description.",
-    "List distinct food components inside items[].",
-    "Include at least two actionable insights in notes[].",
-    "Use analysis.visualObservations to capture key assumptions from the food description.",
-    "Use analysis.portionEstimate to summarise serving size logic.",
-    "Use analysis.confidenceNarrative to explain the confidence score.",
-    "Use analysis.cautions for allergen, diet, or measurement cautions."
+    "Calculate realistic portion sizes and mass in grams based on the detailed food description.",
+    "List distinct food components inside items[] with accurate calorie estimates.",
+    "Include at least 3 actionable nutritional insights in notes[].",
+    "Use analysis.visualObservations to detail 4-6 specific visual cues from the food description that informed your analysis (colors, textures, cooking methods, portion indicators, etc.).",
+    "Use analysis.portionEstimate to explain your serving size methodology with specific reference points.",
+    "Use analysis.confidenceNarrative to provide detailed reasoning for your confidence score, including what you're certain about and what has uncertainty.",
+    "Use analysis.cautions for comprehensive allergen warnings, dietary restrictions, and measurement limitations.",
+    "Ensure confidence is a percentage between 1-100 (not decimal)."
   ].join(" ");
 
   const body = {

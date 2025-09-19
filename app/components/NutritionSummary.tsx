@@ -16,7 +16,9 @@ const sectionCardStyle: React.CSSProperties = {
 };
 
 export function NutritionSummary({ data }: { data: NutritionSummaryType }) {
-  const confidence = Math.round((data.confidence ?? 0) * 100);
+  // Handle confidence as either decimal (0.85) or percentage (85)
+  const confidenceValue = data.confidence ?? 0;
+  const confidence = Math.round(confidenceValue > 1 ? confidenceValue : confidenceValue * 100);
   const micros = Object.entries(data.micronutrients ?? {}).filter(([, value]) =>
     typeof value === "number"
   );
