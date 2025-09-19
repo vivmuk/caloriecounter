@@ -458,7 +458,7 @@ export default function App() {
                   <label style={{ fontWeight: 600, color: "#334155" }}>
                     Vision model
                   </label>
-                  <div style={{ display: "grid", gap: 12 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {VENICE_VISION_MODELS.map((candidate) => {
                       const isActive = candidate.id === modelId;
                       return (
@@ -468,36 +468,44 @@ export default function App() {
                           onClick={() => setModelId(candidate.id)}
                           disabled={loading}
                           aria-pressed={isActive}
+                          title={candidate.description}
                           style={{
-                            textAlign: "left",
-                            display: "grid",
-                            gap: 6,
-                            padding: "16px 18px",
-                            borderRadius: 18,
-                            border: isActive ? "1px solid rgba(79,70,229,0.65)" : "1px solid rgba(148,163,184,0.4)",
-                            background: isActive
-                              ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.1) 100%)"
-                              : "rgba(255,255,255,0.85)",
-                            color: "#1e293b",
+                            padding: "8px 14px",
+                            borderRadius: 999,
+                            border: isActive ? "1px solid rgba(79,70,229,0.7)" : "1px solid rgba(148,163,184,0.45)",
+                            background: isActive ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.12) 100%)" : "rgba(255,255,255,0.9)",
+                            color: isActive ? "#4338ca" : "#475569",
+                            fontWeight: 600,
+                            fontSize: 13,
+                            letterSpacing: 0.2,
                             cursor: loading ? "not-allowed" : "pointer",
-                            boxShadow: isActive ? "0 18px 40px -28px rgba(79,70,229,0.65)" : "none",
-                            transition: "border 0.2s ease, box-shadow 0.2s ease",
+                            boxShadow: isActive ? "0 10px 24px -18px rgba(79,70,229,0.75)" : "none",
+                            transition: "transform 0.15s ease, border 0.2s ease",
                           }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: 700 }}>{candidate.label}</span>
-                            <span style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: isActive ? "#4338ca" : "#64748b" }}>
-                              {isActive ? "Active" : "Tap to select"}
+                          <span>{candidate.label}</span>
+                          {candidate.badge && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                padding: "2px 6px",
+                                borderRadius: 999,
+                                background: isActive ? "rgba(67,56,202,0.15)" : "rgba(148,163,184,0.2)",
+                                fontSize: 10,
+                                letterSpacing: 0.6,
+                                textTransform: "uppercase",
+                                color: isActive ? "#4338ca" : "#64748b",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {candidate.badge}
                             </span>
-                          </div>
-                          <div style={{ fontSize: 14, color: "#475569" }}>{candidate.description}</div>
-                          <div style={{ fontSize: 12, color: "#6366f1", fontWeight: 600 }}>
-                            {candidate.strengths}
-                          </div>
+                          )}
                         </button>
                       );
                     })}
                   </div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>{activeModel.description}</div>
                 </div>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -521,7 +529,7 @@ export default function App() {
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    {loading ? `Analyzing with ${activeModel.label}...` : "Analyze meal"}
+                    {loading ? `Analyzing (${activeModel.label})...` : "Analyze meal"}
                   </button>
                   <button
                     onClick={onClear}

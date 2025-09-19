@@ -44,7 +44,8 @@ export type VeniceVisionModelConfig = {
   id: VeniceVisionModelId;
   label: string;
   description: string;
-  strengths: string;
+  badge?: string;
+  strengths?: string;
 };
 
 export type AnalyzeImageOptions = {
@@ -55,21 +56,21 @@ export type AnalyzeImageOptions = {
 export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
   {
     id: "qwen-2.5-vl",
-    label: "Qwen 2.5 VL 72B",
-    description: "Flagship multimodal reasoning model from Qwen",
-    strengths: "Balanced macro reasoning, strong portion estimates, vivid descriptions",
+    label: "Qwen 2.5 VL",
+    description: "72B flagship: balanced reasoning, confident portion sizing",
+    badge: "Best overall",
   },
   {
     id: "mistral-31-24b",
-    label: "Mistral 3.1 24B Vision",
-    description: "Mistral Small 24B with Venice vision tuning",
-    strengths: "Fast turnaround with reliable ingredient detection and calorie lookup",
+    label: "Mistral 3.1 Vision",
+    description: "24B: fast responses, solid ingredient spotting",
+    badge: "Fast",
   },
   {
     id: "mistral-32-24b",
-    label: "Mistral 3.2 24B Vision (Beta)",
-    description: "Latest Venice build of the Mistral 3.2 vision stack",
-    strengths: "Sharper lighting adjustments, better handling of complex plating",
+    label: "Mistral 3.2 Vision (Beta)",
+    description: "24B beta: handles tricky lighting and plating",
+    badge: "Beta",
   },
 ];
 
@@ -231,6 +232,8 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
     model,
     temperature: 0.15,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
+    venice_parameters: { include_venice_system_prompt: true },
+    parallel_tool_calls: true,
     messages: [
       {
         role: "system",
@@ -244,20 +247,35 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   } as const;
 
   async function post(url: string) {
-    return fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${VENICE_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
+    try {
+      return await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${VENICE_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
-  let res = await post(VENICE_API_URL);
-  if (!res.ok) {
-    // fallback via Netlify proxy to avoid CORS in production
-    res = await post(VENICE_PROXY_URL);
+  let res: Response;
+  try {
+    res = await post(VENICE_API_URL);
+    if (!res.ok) {
+      // fallback via Netlify proxy to avoid CORS in production
+      res = await post(VENICE_PROXY_URL);
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Venice request timed out. Try again or switch to a lighter model.");
+    }
+    throw err;
   }
 
   if (!res.ok) {
