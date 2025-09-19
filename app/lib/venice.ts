@@ -118,7 +118,7 @@ const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Calcula
 - Measurement assumptions and limitations
 Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 1.0): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 512, quality = 0.9): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -197,9 +197,9 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   // Only use Qwen 2.5 VL
   const selectedVisionModel: VeniceVisionModelId = "qwen-2.5-vl";
 
-  // Extract base64 data without data URL prefix
-  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-  console.log("Using base64 format with Qwen 2.5 VL, length:", base64Data.length);
+  // Try full data URL format (what most APIs expect)
+  console.log("Using full data URL format with Qwen 2.5 VL, length:", imageDataUrl.length);
+  console.log("Data URL starts with:", imageDataUrl.substring(0, 30));
 
   const userContent: VeniceMessageContent[] = [];
   if (userDishDescription) {
@@ -213,10 +213,10 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
     text: "Analyze this food image comprehensively. Describe: 1) All visible food items with specific names and preparation methods, 2) Portion sizes with visual reference points (plate size, utensils, etc.), 3) Cooking techniques evident from appearance (grilled, fried, steamed, etc.), 4) Sauce types, seasonings, and garnishes, 5) Texture and doneness indicators, 6) Plating style and presentation details, 7) Any accompaniments or side dishes. Be extremely detailed and specific."
   });
   
-  // Base64 format for Qwen
+  // Full data URL format for Qwen
   userContent.push({
     type: "image_url",
-    image_url: { url: base64Data }
+    image_url: { url: imageDataUrl }
   });
 
   const body = {
@@ -490,9 +490,6 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
     "Use analysis.cautions for allergen, diet, or measurement cautions."
   ].join(" ");
 
-  // Extract base64 data for single-stage fallback
-  const base64Data = imageDataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-  
   const userContent: VeniceMessageContent[] = [];
   if (userDishDescription) {
     userContent.push({
@@ -506,7 +503,7 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
   });
   userContent.push({
     type: "image_url",
-    image_url: { url: base64Data }
+    image_url: { url: imageDataUrl }
   });
 
   const body = {
