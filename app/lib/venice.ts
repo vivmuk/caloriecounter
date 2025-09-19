@@ -115,7 +115,7 @@ const VISION_SYSTEM_PROMPT = `You are a food identification specialist. Analyze 
 
 const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Given a detailed description of food items and portions, calculate precise macro and micronutrient content. Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 800, quality = 0.75): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -142,13 +142,13 @@ async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 0.85
 
 type VeniceMessageContent =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string; detail?: string } };
 
 // Helper function for making Venice API requests
 async function makeVeniceRequest(body: any): Promise<Response> {
   async function post(url: string) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 90_000); // Longer timeout for two-stage process
+    const timeout = window.setTimeout(() => controller.abort(), 120_000); // 2 minutes for two-stage process
     try {
       return await fetch(url, {
         method: "POST",
@@ -205,9 +205,17 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
     type: "text",
     text: "Identify all food items in this image. For each item, describe: the food name, estimated portion size, cooking method, visible ingredients, and any nutritional observations. Be as detailed as possible."
   });
+  
+  // Debug: log image data format
+  console.log("Image data URL length:", imageDataUrl.length);
+  console.log("Image data URL prefix:", imageDataUrl.substring(0, 50));
+  
   userContent.push({
     type: "image_url",
-    image_url: { url: imageDataUrl }
+    image_url: { 
+      url: imageDataUrl,
+      detail: "high"
+    }
   });
 
   const body = {
@@ -224,6 +232,10 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
       }
     ]
   };
+  
+  // Debug: log request details
+  console.log("Vision request model:", selectedVisionModel);
+  console.log("Vision request body size:", JSON.stringify(body).length);
 
   const res = await makeVeniceRequest(body);
   const data = await res.json();
@@ -376,18 +388,178 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
   return parsed;
 }
 
-// Main two-stage analysis function
+// Single-stage fallback (original approach)
+async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: string, visionModel: VeniceVisionModelId = DEFAULT_VISION_MODEL): Promise<NutritionSummary> {
+  const supportedVisionModels: VeniceVisionModelId[] = ["qwen-2.5-vl", "mistral-31-24b", "mistral-32-24b"];
+  const selectedVisionModel: VeniceVisionModelId = supportedVisionModels.includes(visionModel) ? visionModel : DEFAULT_VISION_MODEL;
+
+  const schema = {
+    type: "object",
+    required: [
+      "title",
+      "confidence",
+      "servingDescription",
+      "totalCalories",
+      "macros"
+    ],
+    properties: {
+      title: { type: "string" },
+      confidence: { type: "number" },
+      servingDescription: { type: "string" },
+      totalCalories: { type: "number" },
+      macros: {
+        type: "object",
+        required: ["protein", "carbs", "fat"],
+        properties: {
+          protein: {
+            type: "object",
+            required: ["grams", "calories"],
+            properties: {
+              grams: { type: "number" },
+              calories: { type: "number" }
+            }
+          },
+          carbs: {
+            type: "object",
+            required: ["grams", "calories"],
+            properties: {
+              grams: { type: "number" },
+              calories: { type: "number" },
+              fiber: { type: "number" },
+              sugar: { type: "number" }
+            }
+          },
+          fat: {
+            type: "object",
+            required: ["grams", "calories"],
+            properties: {
+              grams: { type: "number" },
+              calories: { type: "number" },
+              saturated: { type: "number" },
+              unsaturated: { type: "number" }
+            }
+          }
+        }
+      },
+      micronutrients: {
+        type: "object",
+        properties: {
+          sodiumMg: { type: "number" },
+          potassiumMg: { type: "number" },
+          cholesterolMg: { type: "number" },
+          calciumMg: { type: "number" },
+          ironMg: { type: "number" },
+          vitaminCMg: { type: "number" }
+        }
+      },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["name", "quantity", "calories"],
+          properties: {
+            name: { type: "string" },
+            quantity: { type: "string" },
+            calories: { type: "number" },
+            massGrams: { type: "number" }
+          }
+        }
+      },
+      notes: { type: "array", items: { type: "string" } },
+      analysis: {
+        type: "object",
+        properties: {
+          visualObservations: { type: "array", items: { type: "string" } },
+          portionEstimate: { type: "string" },
+          confidenceNarrative: { type: "string" },
+          cautions: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
+  } as const;
+
+  const coreInstruction = [
+    "You must respond with strict JSON conforming to the schema.",
+    "Estimate realistic portion sizes and mass in grams when possible.",
+    "List distinct food components inside items[].",
+    "Include at least two actionable insights in notes[].",
+    "Use analysis.visualObservations to capture key visual cues and assumptions.",
+    "Use analysis.portionEstimate to summarise serving size logic.",
+    "Use analysis.confidenceNarrative to explain the confidence score.",
+    "Use analysis.cautions for allergen, diet, or measurement cautions."
+  ].join(" ");
+
+  const userContent: VeniceMessageContent[] = [];
+  if (userDishDescription) {
+    userContent.push({
+      type: "text",
+      text: `User provided dish hint: "${userDishDescription}". Align the assessment with this context while verifying against the image.`
+    });
+  }
+  userContent.push({
+    type: "text",
+    text: `${coreInstruction} Return only JSON without markdown.`
+  });
+  userContent.push({
+    type: "image_url",
+    image_url: { url: imageDataUrl }
+  });
+
+  const body = {
+    model: selectedVisionModel,
+    temperature: 0.15,
+    response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
+    messages: [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a meticulous nutrition analyst. Given a photo of food (and optional user dish hints), output a single JSON object that follows the provided schema exactly. Provide a realistic breakdown with portion sizing, macro and micro nutrients, and highlight any assumptions or cautions in notes. Avoid prose outside JSON." }]
+      },
+      {
+        role: "user",
+        content: userContent
+      }
+    ]
+  } as const;
+
+  const res = await makeVeniceRequest(body);
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("No nutrition content returned from Venice vision model");
+  }
+
+  let parsed: NutritionSummary;
+  try {
+    if (typeof content === "string") {
+      const start = content.indexOf("{");
+      const end = content.lastIndexOf("}");
+      const jsonStr = start >= 0 && end >= 0 ? content.slice(start, end + 1) : content;
+      parsed = JSON.parse(jsonStr);
+    } else {
+      parsed = content;
+    }
+  } catch (e) {
+    throw new Error("Failed to parse nutrition JSON");
+  }
+  return parsed;
+}
+
+// Main analysis function with fallback
 export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
   const visionModel = options.visionModel ?? DEFAULT_VISION_MODEL;
   const textModel = options.textModel ?? DEFAULT_TEXT_MODEL;
 
-  // Stage 1: Identify food items using vision model
-  const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
-  
-  // Stage 2: Calculate nutrition using text model
-  const nutritionSummary = await calculateNutrition(foodDescription, textModel);
-  
-  return nutritionSummary;
+  try {
+    // Try two-stage processing first
+    const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
+    const nutritionSummary = await calculateNutrition(foodDescription, textModel);
+    return nutritionSummary;
+  } catch (error) {
+    console.warn("Two-stage processing failed, falling back to single-stage:", error);
+    
+    // Fallback to single-stage processing
+    return await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
+  }
 }
