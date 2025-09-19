@@ -222,7 +222,6 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
     temperature: 0.15,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
     venice_parameters: { include_venice_system_prompt: true },
-    parallel_tool_calls: true,
     messages: [
       {
         role: "system",
