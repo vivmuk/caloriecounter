@@ -1,5 +1,5 @@
 import * as React from "react";
-import { analyzeImageWithVenice, VENICE_VISION_MODELS, type NutritionSummary, type VeniceVisionModelId } from "../app/lib/venice";
+import { analyzeImageWithVenice, VENICE_VISION_MODELS, VENICE_TEXT_MODELS, type NutritionSummary, type VeniceVisionModelId, type VeniceTextModelId } from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
@@ -18,11 +18,13 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
-  const [modelId, setModelId] = React.useState<VeniceVisionModelId>(VENICE_VISION_MODELS[0].id);
+  const [visionModelId, setVisionModelId] = React.useState<VeniceVisionModelId>(VENICE_VISION_MODELS[0].id);
+  const [textModelId, setTextModelId] = React.useState<VeniceTextModelId>(VENICE_TEXT_MODELS[0].id);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
-  const activeModel = React.useMemo(() => VENICE_VISION_MODELS.find((entry) => entry.id === modelId) ?? VENICE_VISION_MODELS[0], [modelId]);
+  const activeVisionModel = React.useMemo(() => VENICE_VISION_MODELS.find((entry) => entry.id === visionModelId) ?? VENICE_VISION_MODELS[0], [visionModelId]);
+  const activeTextModel = React.useMemo(() => VENICE_TEXT_MODELS.find((entry) => entry.id === textModelId) ?? VENICE_TEXT_MODELS[0], [textModelId]);
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -137,7 +139,8 @@ export default function App() {
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
-        model: modelId,
+        visionModel: visionModelId,
+        textModel: textModelId,
       });
       setResult(summary);
     } catch (err) {
@@ -202,7 +205,7 @@ export default function App() {
             Food Calorie Counter
           </h1>
           <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.6 }}>
-            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition readout in seconds.
+            Capture a meal, optionally describe the dish, and let {activeVisionModel.label} + {activeTextModel.label} analyze every pixel for a deep nutrition readout in seconds.
           </p>
         </header>
 
@@ -450,62 +453,118 @@ export default function App() {
                     disabled={loading}
                   />
                   <div style={{ fontSize: 13, color: "#64748b" }}>
-                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeModel.label} refine macro estimates.
+                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeVisionModel.label} identify food better.
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  <label style={{ fontWeight: 600, color: "#334155" }}>
-                    Vision model
-                  </label>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {VENICE_VISION_MODELS.map((candidate) => {
-                      const isActive = candidate.id === modelId;
-                      return (
-                        <button
-                          key={candidate.id}
-                          type="button"
-                          onClick={() => setModelId(candidate.id)}
-                          disabled={loading}
-                          aria-pressed={isActive}
-                          title={candidate.description}
-                          style={{
-                            padding: "8px 14px",
-                            borderRadius: 999,
-                            border: isActive ? "1px solid rgba(79,70,229,0.7)" : "1px solid rgba(148,163,184,0.45)",
-                            background: isActive ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.12) 100%)" : "rgba(255,255,255,0.9)",
-                            color: isActive ? "#4338ca" : "#475569",
-                            fontWeight: 600,
-                            fontSize: 13,
-                            letterSpacing: 0.2,
-                            cursor: loading ? "not-allowed" : "pointer",
-                            boxShadow: isActive ? "0 10px 24px -18px rgba(79,70,229,0.75)" : "none",
-                            transition: "transform 0.15s ease, border 0.2s ease",
-                          }}
-                        >
-                          <span>{candidate.label}</span>
-                          {candidate.badge && (
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                padding: "2px 6px",
-                                borderRadius: 999,
-                                background: isActive ? "rgba(67,56,202,0.15)" : "rgba(148,163,184,0.2)",
-                                fontSize: 10,
-                                letterSpacing: 0.6,
-                                textTransform: "uppercase",
-                                color: isActive ? "#4338ca" : "#64748b",
-                                fontWeight: 700,
-                              }}
-                            >
-                              {candidate.badge}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                <div style={{ display: "grid", gap: 16 }}>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <label style={{ fontWeight: 600, color: "#334155" }}>
+                      Vision model (food detection)
+                    </label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {VENICE_VISION_MODELS.map((candidate) => {
+                        const isActive = candidate.id === visionModelId;
+                        return (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            onClick={() => setVisionModelId(candidate.id)}
+                            disabled={loading}
+                            aria-pressed={isActive}
+                            title={candidate.description}
+                            style={{
+                              padding: "8px 14px",
+                              borderRadius: 999,
+                              border: isActive ? "1px solid rgba(79,70,229,0.7)" : "1px solid rgba(148,163,184,0.45)",
+                              background: isActive ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(129,140,248,0.12) 100%)" : "rgba(255,255,255,0.9)",
+                              color: isActive ? "#4338ca" : "#475569",
+                              fontWeight: 600,
+                              fontSize: 13,
+                              letterSpacing: 0.2,
+                              cursor: loading ? "not-allowed" : "pointer",
+                              boxShadow: isActive ? "0 10px 24px -18px rgba(79,70,229,0.75)" : "none",
+                              transition: "transform 0.15s ease, border 0.2s ease",
+                            }}
+                          >
+                            <span>{candidate.label}</span>
+                            {candidate.badge && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  padding: "2px 6px",
+                                  borderRadius: 999,
+                                  background: isActive ? "rgba(67,56,202,0.15)" : "rgba(148,163,184,0.2)",
+                                  fontSize: 10,
+                                  letterSpacing: 0.6,
+                                  textTransform: "uppercase",
+                                  color: isActive ? "#4338ca" : "#64748b",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {candidate.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>{activeVisionModel.description}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>{activeModel.description}</div>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <label style={{ fontWeight: 600, color: "#334155" }}>
+                      Analysis model (nutrition calculation)
+                    </label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {VENICE_TEXT_MODELS.map((candidate) => {
+                        const isActive = candidate.id === textModelId;
+                        return (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            onClick={() => setTextModelId(candidate.id)}
+                            disabled={loading}
+                            aria-pressed={isActive}
+                            title={candidate.description}
+                            style={{
+                              padding: "8px 14px",
+                              borderRadius: 999,
+                              border: isActive ? "1px solid rgba(34,197,94,0.7)" : "1px solid rgba(148,163,184,0.45)",
+                              background: isActive ? "linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(74,222,128,0.12) 100%)" : "rgba(255,255,255,0.9)",
+                              color: isActive ? "#059669" : "#475569",
+                              fontWeight: 600,
+                              fontSize: 13,
+                              letterSpacing: 0.2,
+                              cursor: loading ? "not-allowed" : "pointer",
+                              boxShadow: isActive ? "0 10px 24px -18px rgba(34,197,94,0.75)" : "none",
+                              transition: "transform 0.15s ease, border 0.2s ease",
+                            }}
+                          >
+                            <span>{candidate.label}</span>
+                            {candidate.badge && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  padding: "2px 6px",
+                                  borderRadius: 999,
+                                  background: isActive ? "rgba(5,150,105,0.15)" : "rgba(148,163,184,0.2)",
+                                  fontSize: 10,
+                                  letterSpacing: 0.6,
+                                  textTransform: "uppercase",
+                                  color: isActive ? "#059669" : "#64748b",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {candidate.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>{activeTextModel.description}</div>
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -529,7 +588,7 @@ export default function App() {
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    {loading ? `Analyzing (${activeModel.label})...` : "Analyze meal"}
+                    {loading ? `Analyzing (${activeVisionModel.label} → ${activeTextModel.label})...` : "Analyze meal"}
                   </button>
                   <button
                     onClick={onClear}
@@ -624,8 +683,8 @@ export default function App() {
                   title: "1. Capture & enrich",
                   description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
                 }, {
-                  title: "2. Vision + reasoning",
-                  description: `Vision models like ${activeModel.label} cross-check the pixels with your hints, estimating components, portion size, and macro distribution.`,
+                  title: "2. Two-stage analysis",
+                  description: `${activeVisionModel.label} identifies food items and portions, then ${activeTextModel.label} calculates precise macro and micronutrient breakdowns.`,
                 }, {
                   title: "3. Explainable output",
                   description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",
@@ -658,7 +717,7 @@ export default function App() {
               }}>
                 <h3 style={{ margin: 0, fontSize: 22 }}>Why it feels like magic</h3>
                 <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 10 }}>
-                  <li>Multi-angle vision cues let Qwen estimate volumes and textures beyond a simple label lookup.</li>
+                  <li>Two-stage processing: vision models detect food, then specialized text models calculate precise nutrition.</li>
                   <li>Schema-constrained responses ensure tidy JSON you can plug into trackers or analytics.</li>
                   <li>AI highlights uncertainties, allergens, and portion logic so you know when to double-check.</li>
                 </ul>
