@@ -56,10 +56,13 @@ export type VeniceTextModelConfig = {
   badge?: string;
 };
 
+export type ReasoningEffort = "light" | "medium" | "heavy";
+
 export type AnalyzeImageOptions = {
   userDishDescription?: string;
   visionModel?: VeniceVisionModelId;
   textModel?: VeniceTextModelId;
+  reasoningEffort?: ReasoningEffort;
 };
 
 export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
@@ -249,7 +252,15 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
 }
 
 // Stage 2: Nutrition calculation using text model
-async function calculateNutrition(foodDescription: string, textModel: VeniceTextModelId = DEFAULT_TEXT_MODEL): Promise<NutritionSummary> {
+type NutritionRequestOptions = {
+  reasoningEffort?: ReasoningEffort;
+};
+
+async function calculateNutrition(
+  foodDescription: string,
+  textModel: VeniceTextModelId = DEFAULT_TEXT_MODEL,
+  options: NutritionRequestOptions = {}
+): Promise<NutritionSummary> {
   const supportedTextModels: VeniceTextModelId[] = ["qwen3-235b", "qwen-2.5-qwq-32b", "llama-3.1-405b"];
   const selectedTextModel: VeniceTextModelId = supportedTextModels.includes(textModel) ? textModel : DEFAULT_TEXT_MODEL;
 
@@ -350,7 +361,7 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
     "Ensure confidence is a percentage between 1-100 (not decimal)."
   ].join(" ");
 
-  const body = {
+  const body: Record<string, unknown> = {
     model: selectedTextModel,
     temperature: 0.1,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
@@ -364,7 +375,11 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
         content: `Based on this food description, calculate detailed nutrition information:\n\n${foodDescription}\n\n${coreInstruction} Return only JSON without markdown.`
       }
     ]
-  } as const;
+  };
+
+  if (options.reasoningEffort) {
+    body.reasoning = { effort: options.reasoningEffort };
+  }
 
   const res = await makeVeniceRequest(body);
   const data = await res.json();
@@ -549,15 +564,16 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
 export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
-  
+
   // Hardcoded: Mistral vision for perception, Venice Large 1.1 for analysis
   const visionModel: VeniceVisionModelId = "mistral-31-24b";
-  const textModel = "qwen3-235b";
+  const textModel = options.textModel ?? DEFAULT_TEXT_MODEL;
+  const reasoningEffort = options.reasoningEffort;
 
   try {
     // Try two-stage processing first
     const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
-    const nutritionSummary = await calculateNutrition(foodDescription, textModel);
+    const nutritionSummary = await calculateNutrition(foodDescription, textModel, { reasoningEffort });
     return nutritionSummary;
   } catch (error) {
     console.warn("Two-stage processing failed, falling back to single-stage:", error);

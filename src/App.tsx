@@ -1,5 +1,11 @@
 import * as React from "react";
-import { analyzeImageWithVenice, type NutritionSummary } from "../app/lib/venice";
+import {
+  analyzeImageWithVenice,
+  VENICE_TEXT_MODELS,
+  type NutritionSummary,
+  type ReasoningEffort,
+  type VeniceTextModelId,
+} from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
@@ -18,13 +24,38 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
+  const textModelOptions: Array<{
+    id: VeniceTextModelId;
+    label: string;
+    tagline: string;
+    badge: string;
+    reasoningEffort?: ReasoningEffort;
+  }> = [
+    {
+      id: "qwen3-235b",
+      label: "Venice Large 1.1",
+      tagline: "Fast, high-accuracy macros with reasoning disabled for speed.",
+      badge: "⚡ Fast response",
+    },
+    {
+      id: "qwen-2.5-qwq-32b",
+      label: "Venice Reasoning",
+      tagline: "Google-style deep insights with structured explanations.",
+      badge: "🧠 Deep insights",
+      reasoningEffort: "medium",
+    },
+  ];
+  const [selectedTextModelId, setSelectedTextModelId] = React.useState<VeniceTextModelId>(textModelOptions[0].id);
+  const selectedTextModel =
+    textModelOptions.find((model) => model.id === selectedTextModelId) ?? textModelOptions[0];
   // Models are now hardcoded in the Venice function
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
   // Hardcoded model names for display
   const activeVisionModel = { label: "Mistral 3.1 24B Vision" };
-  const activeTextModel = { label: "Venice Large 1.1" };
+  const activeTextModel =
+    VENICE_TEXT_MODELS.find((model) => model.id === selectedTextModelId) ?? VENICE_TEXT_MODELS[0];
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -139,6 +170,8 @@ export default function App() {
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
+        textModel: selectedTextModel.id,
+        reasoningEffort: selectedTextModel.reasoningEffort,
       });
       setResult(summary);
     } catch (err) {
@@ -428,6 +461,63 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 600, color: "#334155" }}>Analysis mode</div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 12,
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    }}
+                  >
+                    {textModelOptions.map((model) => {
+                      const active = model.id === selectedTextModelId;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          onClick={() => setSelectedTextModelId(model.id)}
+                          disabled={loading}
+                          style={{
+                            textAlign: "left",
+                            padding: "18px 20px",
+                            borderRadius: 18,
+                            border: active
+                              ? "1px solid rgba(79,70,229,0.45)"
+                              : "1px solid rgba(148,163,184,0.45)",
+                            background: active
+                              ? "linear-gradient(135deg, rgba(99,102,241,0.16) 0%, rgba(129,140,248,0.08) 100%)"
+                              : "rgba(255,255,255,0.85)",
+                            color: "#0f172a",
+                            display: "grid",
+                            gap: 8,
+                            cursor: loading ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              letterSpacing: 0.6,
+                              color: active ? "#4338ca" : "#6366f1",
+                            }}
+                          >
+                            {model.badge}
+                          </span>
+                          <span style={{ fontSize: 18, fontWeight: 700 }}>{model.label}</span>
+                          <span style={{ fontSize: 13, color: "#475569" }}>{model.tagline}</span>
+                          <span style={{ fontSize: 12, color: "#64748b" }}>
+                            {model.reasoningEffort
+                              ? "Reasoning enabled · expect longer responses"
+                              : "Reasoning disabled · fastest turnaround"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
                   <label htmlFor="dishHint" style={{ fontWeight: 600, color: "#334155" }}>
                     Optional dish description
                   </label>
@@ -460,7 +550,9 @@ export default function App() {
                     AI Models: {activeVisionModel.label} + {activeTextModel.label}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                    Optimized two-stage processing for accurate nutrition analysis
+                    {selectedTextModel.reasoningEffort
+                      ? "Deep reasoning pipeline for comprehensive nutritional insights"
+                      : "Reasoning disabled so Venice Large returns results faster"}
                   </div>
                 </div>
 
