@@ -23,7 +23,7 @@ export default function App() {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
   // Hardcoded model names for display
-  const activeVisionModel = { label: "Qwen 2.5 VL 72B" };
+  const activeVisionModel = { label: "Mistral 3.1 24B Vision" };
   const activeTextModel = { label: "Venice Large 1.1" };
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -567,7 +567,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app pairs computer vision with Venice-hosted vision models (Qwen 2.5 VL, Venice Medium, Venice Large) so you can choose the right analyst for every plate.
+                  The app pairs computer vision with Venice-hosted vision models like Mistral 3.1 24B Vision so you can choose the right analyst for every plate.
                 </p>
               </div>
 

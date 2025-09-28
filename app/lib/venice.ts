@@ -38,7 +38,7 @@ export type NutritionSummary = {
   analysis?: NutritionAnalysis;
 };
 
-export type VeniceVisionModelId = "qwen-2.5-vl";
+export type VeniceVisionModelId = "mistral-31-24b";
 export type VeniceTextModelId = "qwen3-235b" | "qwen-2.5-qwq-32b" | "llama-3.1-405b";
 
 export type VeniceVisionModelConfig = {
@@ -64,9 +64,9 @@ export type AnalyzeImageOptions = {
 
 export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
   {
-    id: "qwen-2.5-vl",
-    label: "Qwen 2.5 VL 72B",
-    description: "72B: excellent food identification and portion estimation",
+    id: "mistral-31-24b",
+    label: "Mistral 3.1 24B Vision",
+    description: "24B: sharp food recognition with reliable portion estimation",
     badge: "Best overall",
   },
 ];
@@ -92,7 +92,7 @@ export const VENICE_TEXT_MODELS: VeniceTextModelConfig[] = [
   },
 ];
 
-const DEFAULT_VISION_MODEL: VeniceVisionModelId = "qwen-2.5-vl";
+const DEFAULT_VISION_MODEL: VeniceVisionModelId = "mistral-31-24b";
 const DEFAULT_TEXT_MODEL: VeniceTextModelId = "qwen3-235b";
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
@@ -194,11 +194,11 @@ async function makeVeniceRequest(body: any): Promise<Response> {
 
 // Stage 1: Food identification using vision model
 async function identifyFoodItems(imageDataUrl: string, userDishDescription?: string, visionModel: VeniceVisionModelId = DEFAULT_VISION_MODEL): Promise<string> {
-  // Only use Qwen 2.5 VL
-  const selectedVisionModel: VeniceVisionModelId = "qwen-2.5-vl";
+  // Only use Mistral 3.1 24B Vision
+  const selectedVisionModel: VeniceVisionModelId = "mistral-31-24b";
 
   // Try full data URL format (what most APIs expect)
-  console.log("Using full data URL format with Qwen 2.5 VL, length:", imageDataUrl.length);
+  console.log("Using full data URL format with Mistral 3.1 24B Vision, length:", imageDataUrl.length);
   console.log("Data URL starts with:", imageDataUrl.substring(0, 30));
 
   const userContent: VeniceMessageContent[] = [];
@@ -213,7 +213,7 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
     text: "Analyze this food image comprehensively. Describe: 1) All visible food items with specific names and preparation methods, 2) Portion sizes with visual reference points (plate size, utensils, etc.), 3) Cooking techniques evident from appearance (grilled, fried, steamed, etc.), 4) Sauce types, seasonings, and garnishes, 5) Texture and doneness indicators, 6) Plating style and presentation details, 7) Any accompaniments or side dishes. Be extremely detailed and specific."
   });
   
-  // Full data URL format for Qwen
+  // Full data URL format for Mistral vision
   userContent.push({
     type: "image_url",
     image_url: { url: imageDataUrl }
@@ -391,8 +391,8 @@ async function calculateNutrition(foodDescription: string, textModel: VeniceText
 
 // Single-stage fallback (original approach)
 async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: string, visionModel: VeniceVisionModelId = DEFAULT_VISION_MODEL): Promise<NutritionSummary> {
-  // Only use Qwen 2.5 VL
-  const selectedVisionModel: VeniceVisionModelId = "qwen-2.5-vl";
+  // Only use Mistral 3.1 24B Vision
+  const selectedVisionModel: VeniceVisionModelId = "mistral-31-24b";
 
   const schema = {
     type: "object",
@@ -550,8 +550,8 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
   
-  // Hardcoded: Qwen for vision, Venice Large 1.1 for analysis
-  const visionModel = "qwen-2.5-vl";
+  // Hardcoded: Mistral vision for perception, Venice Large 1.1 for analysis
+  const visionModel: VeniceVisionModelId = "mistral-31-24b";
   const textModel = "qwen3-235b";
 
   try {
