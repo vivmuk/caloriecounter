@@ -574,9 +574,19 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   // Detect mobile devices - they're slower so use single-stage
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
+  console.log("Device check:", { isMobile, userAgent: navigator.userAgent });
+  console.log("Image size:", imageDataUrl.length, "characters");
+  
   if (isMobile) {
-    console.log("Mobile device detected - using single-stage processing for better reliability");
-    return await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
+    console.log("📱 Mobile device detected - using single-stage processing for better reliability");
+    try {
+      const result = await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
+      console.log("✅ Single-stage analysis completed successfully");
+      return result;
+    } catch (error) {
+      console.error("❌ Single-stage analysis failed:", error);
+      throw error;
+    }
   }
 
   try {
