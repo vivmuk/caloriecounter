@@ -24,12 +24,12 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
+  // Only one option: Venice Large 1.1 with reasoning disabled for speed
   const textModelOptions: Array<{
     id: VeniceTextModelId;
     label: string;
     tagline: string;
     badge: string;
-    reasoningEffort?: ReasoningEffort;
   }> = [
     {
       id: "qwen3-235b",
@@ -37,17 +37,9 @@ export default function App() {
       tagline: "Fast, high-accuracy macros with reasoning disabled for speed.",
       badge: "⚡ Fast response",
     },
-    {
-      id: "qwen-2.5-qwq-32b",
-      label: "Venice Reasoning",
-      tagline: "Google-style deep insights with structured explanations.",
-      badge: "🧠 Deep insights",
-      reasoningEffort: "medium",
-    },
   ];
-  const [selectedTextModelId, setSelectedTextModelId] = React.useState<VeniceTextModelId>(textModelOptions[0].id);
-  const selectedTextModel =
-    textModelOptions.find((model) => model.id === selectedTextModelId) ?? textModelOptions[0];
+  const [selectedTextModelId, setSelectedTextModelId] = React.useState<VeniceTextModelId>("qwen3-235b");
+  const selectedTextModel = textModelOptions[0];
   // Models are now hardcoded in the Venice function
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -169,8 +161,6 @@ export default function App() {
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
-        textModel: selectedTextModel.id,
-        reasoningEffort: selectedTextModel.reasoningEffort,
       });
       setResult(summary);
     } catch (err) {
@@ -506,9 +496,7 @@ export default function App() {
                           <span style={{ fontSize: 18, fontWeight: 700 }}>{model.label}</span>
                           <span style={{ fontSize: 13, color: "#475569" }}>{model.tagline}</span>
                           <span style={{ fontSize: 12, color: "#64748b" }}>
-                            {model.reasoningEffort
-                              ? "Reasoning enabled · expect longer responses"
-                              : "Reasoning disabled · fastest turnaround"}
+                            Reasoning disabled · fastest turnaround
                           </span>
                         </button>
                       );
@@ -549,9 +537,7 @@ export default function App() {
                     AI Models: {activeVisionModel.label} + {activeTextModel.label}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                    {selectedTextModel.reasoningEffort
-                      ? "Deep reasoning pipeline for comprehensive nutritional insights"
-                      : "Reasoning disabled so Venice Large returns results faster"}
+                    Reasoning disabled so Venice Large returns results faster
                   </div>
                 </div>
 
