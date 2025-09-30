@@ -22,7 +22,7 @@ export default function App() {
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
-  const [supportsStreamCamera, setSupportsStreamCamera] = React.useState(false);
+  const [supportsStreamCamera, setSupportsStreamCamera] = React.useState(true);
   const previousImageUrlRef = React.useRef<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -42,10 +42,59 @@ export default function App() {
   const activeModel = { label: "Mistral 3.1 24B Vision" };
 
   React.useEffect(() => {
-    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      setSupportsStreamCamera(true);
+    if (typeof window === "undefined") {
+      return;
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSupportsStreamCamera(false);
+      return;
+    }
+
+    if (typeof navigator.mediaDevices.enumerateDevices !== "function") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const evaluateCameraSupport = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) return;
+        const hasVideoInput = devices.some((device) => device.kind === "videoinput");
+        setSupportsStreamCamera(hasVideoInput);
+      } catch (err) {
+        console.warn("Unable to enumerate media devices", err);
+        if (!cancelled) {
+          // If we cannot enumerate (Safari before permission, etc.), keep camera option available.
+          setSupportsStreamCamera(true);
+        }
+      }
+    };
+
+    evaluateCameraSupport();
+
+    const mediaDevices = navigator.mediaDevices;
+    const handler = () => evaluateCameraSupport();
+
+    if (typeof mediaDevices.addEventListener === "function") {
+      mediaDevices.addEventListener("devicechange", handler);
+      return () => {
+        cancelled = true;
+        mediaDevices.removeEventListener("devicechange", handler);
+      };
+    }
+
+    const previous = mediaDevices.ondevicechange;
+    mediaDevices.ondevicechange = handler;
+
+    return () => {
+      cancelled = true;
+      mediaDevices.ondevicechange = previous;
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
     }
@@ -55,7 +104,6 @@ export default function App() {
       setIsMobile(event.matches);
     };
 
-    // Initial state
     update(query);
 
     if (typeof query.addEventListener === "function") {
@@ -63,7 +111,6 @@ export default function App() {
       return () => query.removeEventListener("change", update);
     }
 
-    // Safari fallback
     query.addListener(update);
     return () => query.removeListener(update);
   }, []);
@@ -141,16 +188,18 @@ export default function App() {
     }
   }
 
-  function stopCamera() {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
+  const stopCamera = React.useCallback(() => {
+    setStream((current) => {
+      if (current) {
+        current.getTracks().forEach((track) => track.stop());
+      }
+      return null;
+    });
     setShowCamera(false);
     setCameraLoading(false);
-  }
+  }, []);
 
-  function capturePhoto() {
+  const capturePhoto = React.useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -172,15 +221,13 @@ export default function App() {
         stopCamera();
       }
     }, "image/jpeg", 0.9);
-  }
+  }, [stopCamera]);
 
   React.useEffect(() => {
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCamera();
     };
-  }, [stream]);
+  }, [stopCamera]);
 
   React.useEffect(() => {
     if (stream && videoRef.current && showCamera) {
@@ -193,7 +240,7 @@ export default function App() {
     if (activeSection !== "scan") {
       stopCamera();
     }
-  }, [activeSection]);
+  }, [activeSection, stopCamera]);
 
   async function onAnalyze() {
     if (!file) return;
@@ -619,7 +666,7 @@ export default function App() {
                   id="fileInput"
                   type="file"
                   accept="image/*"
-                  capture="environment"
+                  capture={isMobile ? "environment" : undefined}
                   onChange={onSelect}
                   style={{
                     position: "absolute",
