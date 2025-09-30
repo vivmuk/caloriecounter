@@ -56,13 +56,10 @@ export type VeniceTextModelConfig = {
   badge?: string;
 };
 
-export type ReasoningEffort = "light" | "medium" | "heavy";
-
 export type AnalyzeImageOptions = {
   userDishDescription?: string;
   visionModel?: VeniceVisionModelId;
   textModel?: VeniceTextModelId;
-  reasoningEffort?: ReasoningEffort;
 };
 
 export const VENICE_VISION_MODELS: VeniceVisionModelConfig[] = [
@@ -266,14 +263,9 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
 }
 
 // Stage 2: Nutrition calculation using text model
-type NutritionRequestOptions = {
-  reasoningEffort?: ReasoningEffort;
-};
-
 async function calculateNutrition(
   foodDescription: string,
-  textModel: VeniceTextModelId = DEFAULT_TEXT_MODEL,
-  options: NutritionRequestOptions = {}
+  textModel: VeniceTextModelId = DEFAULT_TEXT_MODEL
 ): Promise<NutritionSummary> {
   const supportedTextModels: VeniceTextModelId[] = ["qwen3-235b", "qwen-2.5-qwq-32b", "llama-3.1-405b"];
   const selectedTextModel: VeniceTextModelId = supportedTextModels.includes(textModel) ? textModel : DEFAULT_TEXT_MODEL;
@@ -554,7 +546,7 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
 
   const body = {
     model: selectedVisionModel,
-    temperature: 0.15,
+    temperature: 0.6,
     response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
     messages: [
       {
