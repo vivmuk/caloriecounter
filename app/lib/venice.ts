@@ -121,7 +121,7 @@ const NUTRITION_SYSTEM_PROMPT = `You are a meticulous nutrition analyst. Calcula
 - Measurement assumptions and limitations
 Output a single JSON object that follows the provided schema exactly.`;
 
-async function resizeImageToJpeg(file: File, maxDimension = 1024, quality = 1.0): Promise<string> {
+async function resizeImageToJpeg(file: File, maxDimension = 800, quality = 0.85): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -154,7 +154,7 @@ type VeniceMessageContent =
 async function makeVeniceRequest(body: any): Promise<Response> {
   async function post(url: string) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 120_000); // 2 minutes for two-stage process
+    const timeout = window.setTimeout(() => controller.abort(), 180_000); // 3 minutes for mobile compatibility
     try {
       return await fetch(url, {
         method: "POST",
@@ -179,7 +179,10 @@ async function makeVeniceRequest(body: any): Promise<Response> {
     }
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Venice request timed out. Try again or switch to a lighter model.");
+      throw new Error("Request timed out. This sometimes happens on mobile - please try again.");
+    }
+    if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+      throw new Error("Network error. Please check your internet connection and try again.");
     }
     throw err;
   }
@@ -568,8 +571,17 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   const visionModel: VeniceVisionModelId = "mistral-31-24b";
   const textModel: VeniceTextModelId = "qwen3-235b";
 
+  // Detect mobile devices - they're slower so use single-stage
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    console.log("Mobile device detected - using single-stage processing for better reliability");
+    return await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
+  }
+
   try {
-    // Try two-stage processing first (no reasoning for speed)
+    // Desktop: Try two-stage processing first (no reasoning for speed)
+    console.log("Desktop device - using two-stage processing");
     const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
     const nutritionSummary = await calculateNutrition(foodDescription, textModel);
     return nutritionSummary;
