@@ -610,44 +610,18 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
   return parsed;
 }
 
-// Main analysis function with hardcoded models
+// Main analysis function - single-stage with Mistral 3.1 24B everywhere
 export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOptions = {}): Promise<NutritionSummary> {
   const imageDataUrl = await resizeImageToJpeg(file);
   const userDishDescription = options.userDishDescription?.trim();
 
-  // Hardcoded: Mistral vision for perception, Venice Large 1.1 for analysis
-  // Reasoning is disabled for fastest speed
+  // Hardcoded: Mistral 3.1 24B Vision for everything - simple, fast, works everywhere
   const visionModel: VeniceVisionModelId = "mistral-31-24b";
-  const textModel: VeniceTextModelId = "qwen3-235b";
 
-  // Detect mobile devices - they're slower so use single-stage
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  
-  console.log("Device check:", { isMobile, userAgent: navigator.userAgent });
+  console.log("🚀 Using single-stage Mistral 3.1 24B Vision for all devices");
   console.log("Image size:", imageDataUrl.length, "characters");
   
-  if (isMobile) {
-    console.log("📱 Mobile device detected - using single-stage processing for better reliability");
-    try {
-      const result = await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
-      console.log("✅ Single-stage analysis completed successfully");
-      return result;
-    } catch (error) {
-      console.error("❌ Single-stage analysis failed:", error);
-      throw error;
-    }
-  }
-
-  try {
-    // Desktop: Try two-stage processing first (no reasoning for speed)
-    console.log("Desktop device - using two-stage processing");
-    const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
-    const nutritionSummary = await calculateNutrition(foodDescription, textModel);
-    return nutritionSummary;
-  } catch (error) {
-    console.warn("Two-stage processing failed, falling back to single-stage:", error);
-    
-    // Fallback to single-stage processing
-    return await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
-  }
+  const result = await analyzeSingleStage(imageDataUrl, userDishDescription, visionModel);
+  console.log("✅ Analysis completed successfully");
+  return result;
 }

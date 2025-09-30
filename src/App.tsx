@@ -1,10 +1,7 @@
 import * as React from "react";
 import {
   analyzeImageWithVenice,
-  VENICE_TEXT_MODELS,
   type NutritionSummary,
-  type ReasoningEffort,
-  type VeniceTextModelId,
 } from "../app/lib/venice";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
@@ -24,29 +21,11 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
-  // Only one option: Venice Large 1.1 with reasoning disabled for speed
-  const textModelOptions: Array<{
-    id: VeniceTextModelId;
-    label: string;
-    tagline: string;
-    badge: string;
-  }> = [
-    {
-      id: "qwen3-235b",
-      label: "Venice Large 1.1",
-      tagline: "Fast, high-accuracy macros with reasoning disabled for speed.",
-      badge: "⚡ Fast response",
-    },
-  ];
-  const [selectedTextModelId, setSelectedTextModelId] = React.useState<VeniceTextModelId>("qwen3-235b");
-  const selectedTextModel = textModelOptions[0];
-  // Models are now hardcoded in the Venice function
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
-  // Hardcoded model names for display (reasoning disabled for speed)
-  const activeVisionModel = { label: "Mistral 3.1 24B Vision" };
-  const activeTextModel = { label: "Venice Large 1.1 (235B)" };
+  // Single model for everything - simple and fast
+  const activeModel = { label: "Mistral 3.1 24B Vision" };
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -225,7 +204,7 @@ export default function App() {
             Food Calorie Counter
           </h1>
           <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.6 }}>
-            Capture a meal, optionally describe the dish, and let {activeVisionModel.label} + {activeTextModel.label} analyze every pixel for a deep nutrition readout in seconds.
+            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition readout in seconds.
           </p>
         </header>
 
@@ -450,61 +429,6 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontWeight: 600, color: "#334155" }}>Analysis mode</div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 12,
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    }}
-                  >
-                    {textModelOptions.map((model) => {
-                      const active = model.id === selectedTextModelId;
-                      return (
-                        <button
-                          key={model.id}
-                          type="button"
-                          onClick={() => setSelectedTextModelId(model.id)}
-                          disabled={loading}
-                          style={{
-                            textAlign: "left",
-                            padding: "18px 20px",
-                            borderRadius: 18,
-                            border: active
-                              ? "1px solid rgba(79,70,229,0.45)"
-                              : "1px solid rgba(148,163,184,0.45)",
-                            background: active
-                              ? "linear-gradient(135deg, rgba(99,102,241,0.16) 0%, rgba(129,140,248,0.08) 100%)"
-                              : "rgba(255,255,255,0.85)",
-                            color: "#0f172a",
-                            display: "grid",
-                            gap: 8,
-                            cursor: loading ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              textTransform: "uppercase",
-                              letterSpacing: 0.6,
-                              color: active ? "#4338ca" : "#6366f1",
-                            }}
-                          >
-                            {model.badge}
-                          </span>
-                          <span style={{ fontSize: 18, fontWeight: 700 }}>{model.label}</span>
-                          <span style={{ fontSize: 13, color: "#475569" }}>{model.tagline}</span>
-                          <span style={{ fontSize: 12, color: "#64748b" }}>
-                            Reasoning disabled · fastest turnaround
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
                   <label htmlFor="dishHint" style={{ fontWeight: 600, color: "#334155" }}>
                     Optional dish description
                   </label>
@@ -528,16 +452,16 @@ export default function App() {
                     disabled={loading}
                   />
                   <div style={{ fontSize: 13, color: "#64748b" }}>
-                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeVisionModel.label} identify food better.
+                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeModel.label} identify food better.
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ fontWeight: 600, color: "#334155", textAlign: "center" }}>
-                    AI Models: {activeVisionModel.label} + {activeTextModel.label}
+                    AI Model: {activeModel.label}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                    Reasoning disabled so Venice Large returns results faster
+                    Single-stage analysis for fast, reliable results on all devices
                   </div>
                 </div>
 
@@ -562,7 +486,7 @@ export default function App() {
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    {loading ? `Analyzing (${activeVisionModel.label} → ${activeTextModel.label})...` : "Analyze meal"}
+                    {loading ? `Analyzing with ${activeModel.label}...` : "Analyze meal"}
                   </button>
                   <button
                     onClick={onClear}
@@ -644,7 +568,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app pairs computer vision with Venice-hosted vision models like Mistral 3.1 24B Vision so you can choose the right analyst for every plate.
+                  The app uses {activeModel.label} powered by Venice AI to analyze food images and calculate detailed nutrition information in a single pass.
                 </p>
               </div>
 
@@ -657,8 +581,8 @@ export default function App() {
                   title: "1. Capture & enrich",
                   description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
                 }, {
-                  title: "2. Two-stage analysis",
-                  description: `${activeVisionModel.label} identifies food items and portions, then ${activeTextModel.label} calculates precise macro and micronutrient breakdowns.`,
+                  title: "2. AI analysis",
+                  description: `${activeModel.label} identifies food items, estimates portions, and calculates precise macro and micronutrient breakdowns in one go.`,
                 }, {
                   title: "3. Explainable output",
                   description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",
