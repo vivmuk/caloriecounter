@@ -52,10 +52,9 @@ export default function App() {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
-  // Hardcoded model names for display
+  // Hardcoded model names for display (reasoning disabled for speed)
   const activeVisionModel = { label: "Mistral 3.1 24B Vision" };
-  const activeTextModel =
-    VENICE_TEXT_MODELS.find((model) => model.id === selectedTextModelId) ?? VENICE_TEXT_MODELS[0];
+  const activeTextModel = { label: "Venice Large 1.1 (235B)" };
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];

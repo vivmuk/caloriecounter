@@ -377,9 +377,7 @@ async function calculateNutrition(
     ]
   };
 
-  if (options.reasoningEffort) {
-    body.reasoning = { effort: options.reasoningEffort };
-  }
+  // Reasoning is disabled for speed - always use fastest response
 
   const res = await makeVeniceRequest(body);
   const data = await res.json();
@@ -566,14 +564,14 @@ export async function analyzeImageWithVenice(file: File, options: AnalyzeImageOp
   const userDishDescription = options.userDishDescription?.trim();
 
   // Hardcoded: Mistral vision for perception, Venice Large 1.1 for analysis
+  // Reasoning is disabled for fastest speed
   const visionModel: VeniceVisionModelId = "mistral-31-24b";
-  const textModel = options.textModel ?? DEFAULT_TEXT_MODEL;
-  const reasoningEffort = options.reasoningEffort;
+  const textModel: VeniceTextModelId = "qwen3-235b";
 
   try {
-    // Try two-stage processing first
+    // Try two-stage processing first (no reasoning for speed)
     const foodDescription = await identifyFoodItems(imageDataUrl, userDishDescription, visionModel);
-    const nutritionSummary = await calculateNutrition(foodDescription, textModel, { reasoningEffort });
+    const nutritionSummary = await calculateNutrition(foodDescription, textModel);
     return nutritionSummary;
   } catch (error) {
     console.warn("Two-stage processing failed, falling back to single-stage:", error);
