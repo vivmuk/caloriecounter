@@ -11,7 +11,7 @@ type Section = "scan" | "howItWorks";
 type VeniceContentElement = { id: Section; label: string; icon: React.ReactElement<{ color?: string }> };
 
 export default function App() {
-  const [image, setImage] = React.useState<string | null>(null);
+  const [image, setImageState] = React.useState<string | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -21,11 +21,61 @@ export default function App() {
   const [cameraLoading, setCameraLoading] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [supportsStreamCamera, setSupportsStreamCamera] = React.useState(false);
+  const previousImageUrlRef = React.useRef<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const setImage = React.useCallback((value: string | null) => {
+    const previous = previousImageUrlRef.current;
+    if (previous && previous.startsWith("blob:")) {
+      URL.revokeObjectURL(previous);
+    }
+
+    previousImageUrlRef.current = value ?? null;
+    setImageState(value);
+  }, []);
 
   // Single model for everything - simple and fast
   const activeModel = { label: "Mistral 3.1 24B Vision" };
+
+  React.useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      setSupportsStreamCamera(true);
+    }
+
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const query = window.matchMedia("(max-width: 768px)");
+    const update = (event: MediaQueryList | MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    // Initial state
+    update(query);
+
+    if (typeof query.addEventListener === "function") {
+      query.addEventListener("change", update);
+      return () => query.removeEventListener("change", update);
+    }
+
+    // Safari fallback
+    query.addListener(update);
+    return () => query.removeListener(update);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      const previous = previousImageUrlRef.current;
+      if (previous && previous.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+    };
+  }, []);
 
   async function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -36,9 +86,21 @@ export default function App() {
     const url = URL.createObjectURL(f);
     setImage(url);
     setShowCamera(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   async function startCamera() {
+    if (!supportsStreamCamera) {
+      setError(null);
+      setShowCamera(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+      return;
+    }
+
     try {
       setError(null);
       setCameraLoading(true);
@@ -155,6 +217,9 @@ export default function App() {
     setResult(null);
     setError(null);
     setDishHint("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
     stopCamera();
   }
 
@@ -162,6 +227,23 @@ export default function App() {
     { id: "scan", label: "Scan", icon: <CameraIcon size={20} /> },
     { id: "howItWorks", label: "How it Works", icon: <SparkleIcon size={20} /> },
   ];
+
+  const layoutMetrics = React.useMemo(
+    () => ({
+      containerPadding: isMobile ? "24px 16px 20px" : "32px 20px 24px",
+      outerGap: isMobile ? 20 : 24,
+      cardPadding: isMobile ? 20 : 28,
+      cardGap: isMobile ? 16 : 20,
+      heroTitleSize: isMobile ? 28 : 36,
+      heroSubtitleSize: isMobile ? 14 : 16,
+      analyzeButtonPadding: isMobile ? "14px 20px" : "16px 24px",
+      analyzeButtonFontSize: isMobile ? 15 : 16,
+      hintFontSize: isMobile ? 13 : 14,
+      pillFontSize: isMobile ? 10 : 12,
+      pillPadding: isMobile ? "5px 12px" : "6px 14px",
+    }),
+    [isMobile]
+  );
 
   const disableAnalyze = !file || loading;
 
@@ -171,25 +253,25 @@ export default function App() {
       background: "radial-gradient(120% 120% at 50% 0%, #e0e7ff 0%, #f8fafc 45%, #f1f5f9 100%)",
     }}>
       <div style={{
-        maxWidth: 960,
+        maxWidth: isMobile ? "100%" : 960,
         margin: "0 auto",
         minHeight: "100dvh",
         display: "grid",
         gridTemplateRows: "auto 1fr auto",
-        padding: "32px 20px 24px",
-        gap: 24,
+        padding: layoutMetrics.containerPadding,
+        gap: layoutMetrics.outerGap,
       }}>
         <header style={{ textAlign: "center" }}>
           <div style={{
             display: "inline-flex",
             alignItems: "center",
             gap: 8,
-            padding: "6px 14px",
+            padding: layoutMetrics.pillPadding,
             borderRadius: 999,
             background: "rgba(79, 70, 229, 0.12)",
             color: "#4338ca",
             fontWeight: 600,
-            fontSize: 12,
+            fontSize: layoutMetrics.pillFontSize,
             letterSpacing: 0.4,
             textTransform: "uppercase",
           }}>
@@ -197,41 +279,44 @@ export default function App() {
           </div>
           <h1 style={{
             margin: "18px 0 12px",
-            fontSize: 36,
+            fontSize: layoutMetrics.heroTitleSize,
             fontWeight: 700,
             color: "#0f172a",
           }}>
             Food Calorie Counter
           </h1>
-          <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.6 }}>
-            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition readout in seconds.
+          <p
+            style={{ margin: 0, color: "#475569", fontSize: layoutMetrics.heroSubtitleSize, lineHeight: 1.6 }}
+          >
+            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition
+            readout in seconds.
           </p>
         </header>
 
-        <main style={{ paddingBottom: 32 }}>
+        <main style={{ paddingBottom: isMobile ? 24 : 32 }}>
           {activeSection === "scan" ? (
-            <div style={{ display: "grid", gap: 28 }}>
+            <div style={{ display: "grid", gap: isMobile ? 20 : 28 }}>
               <div style={{
                 display: "grid",
-                gap: 20,
+                gap: layoutMetrics.cardGap,
                 background: "rgba(255,255,255,0.92)",
                 borderRadius: 28,
-                padding: 28,
+                padding: layoutMetrics.cardPadding,
                 border: "1px solid rgba(79,70,229,0.12)",
                 boxShadow: "0 32px 60px -30px rgba(79, 70, 229, 0.35)",
                 backdropFilter: "blur(18px)",
               }}>
-                <div style={{ textAlign: "center", color: "#334155", fontSize: 18, fontWeight: 600 }}>
+                <div style={{ textAlign: "center", color: "#334155", fontSize: isMobile ? 16 : 18, fontWeight: 600 }}>
                   Upload a photo or open the camera to get a precision calorie breakdown.
                 </div>
 
                 <div style={{
                   background: "linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(129,140,248,0.08) 100%)",
                   borderRadius: 24,
-                  padding: 20,
+                  padding: isMobile ? 16 : 20,
                   border: "1px dashed rgba(99,102,241,0.4)",
                   display: "grid",
-                  gap: 16,
+                  gap: isMobile ? 12 : 16,
                   justifyItems: "center",
                 }}>
                   {showCamera ? (
@@ -295,7 +380,7 @@ export default function App() {
                         left: "50%",
                         transform: "translateX(-50%)",
                         display: "flex",
-                        gap: 16,
+                        gap: isMobile ? 12 : 16,
                         alignItems: "center",
                       }}>
                         <button
@@ -331,7 +416,7 @@ export default function App() {
                           <div style={{ width: 58, height: 58, borderRadius: "50%", background: "#0f172a" }} />
                         </button>
                         <button
-                          onClick={() => document.getElementById("fileInput")?.click()}
+                          onClick={() => fileInputRef.current?.click()}
                           style={{
                             width: 54,
                             height: 54,
@@ -357,14 +442,14 @@ export default function App() {
                         borderRadius: 20,
                         border: "1px solid rgba(148,163,184,0.4)",
                         boxShadow: "0 20px 55px -30px rgba(15,23,42,0.8)",
-                        maxHeight: 360,
+                        maxHeight: isMobile ? 260 : 360,
                         objectFit: "cover",
                       }}
                     />
                   ) : (
                     <div style={{
                       width: "100%",
-                      minHeight: 220,
+                      minHeight: isMobile ? 180 : 220,
                       borderRadius: 20,
                       background: "rgba(248,250,252,0.8)",
                       border: "1px dashed rgba(148,163,184,0.6)",
@@ -377,20 +462,20 @@ export default function App() {
                     }}>
                       <CameraIcon size={34} color="#94a3b8" />
                       <div style={{ fontWeight: 500 }}>No photo yet</div>
-                      <div style={{ fontSize: 13 }}>Upload or open the camera to begin</div>
+                      <div style={{ fontSize: isMobile ? 12 : 13 }}>Upload or open the camera to begin</div>
                     </div>
                   )}
 
                   {!showCamera && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center" }}>
-                      <button
-                        onClick={() => document.getElementById("fileInput")?.click()}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 12 : 16, justifyContent: "center" }}>
+                      <label
+                        htmlFor="fileInput"
                         style={{
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
                           gap: 10,
-                          padding: "18px 26px",
+                          padding: isMobile ? "16px 22px" : "18px 26px",
                           borderRadius: 20,
                           border: "1px solid rgba(148,163,184,0.5)",
                           background: "rgba(255,255,255,0.8)",
@@ -402,28 +487,52 @@ export default function App() {
                       >
                         <GalleryIcon size={28} color="#6366f1" />
                         Upload Photo
-                      </button>
-                      <button
-                        onClick={startCamera}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "18px 26px",
-                          borderRadius: 20,
-                          border: 0,
-                          background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          color: "#fff",
-                          minWidth: 140,
-                          boxShadow: "0 18px 35px -20px rgba(99,102,241,0.9)",
-                        }}
-                      >
-                        <CameraIcon size={28} color="#fff" />
-                        Use Camera
-                      </button>
+                      </label>
+                      {supportsStreamCamera ? (
+                        <button
+                          onClick={startCamera}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: isMobile ? "16px 22px" : "18px 26px",
+                            borderRadius: 20,
+                            border: 0,
+                            background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            color: "#fff",
+                            minWidth: 140,
+                            boxShadow: "0 18px 35px -20px rgba(99,102,241,0.9)",
+                          }}
+                        >
+                          <CameraIcon size={28} color="#fff" />
+                          Use Camera
+                        </button>
+                      ) : (
+                        <label
+                          htmlFor="fileInput"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: isMobile ? "16px 22px" : "18px 26px",
+                            borderRadius: 20,
+                            border: 0,
+                            background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            color: "#fff",
+                            minWidth: 140,
+                            boxShadow: "0 18px 35px -20px rgba(99,102,241,0.9)",
+                          }}
+                        >
+                          <CameraIcon size={28} color="#fff" />
+                          Take Photo
+                        </label>
+                      )}
                     </div>
                   )}
                 </div>
@@ -451,7 +560,7 @@ export default function App() {
                     }}
                     disabled={loading}
                   />
-                  <div style={{ fontSize: 13, color: "#64748b" }}>
+                  <div style={{ fontSize: layoutMetrics.hintFontSize, color: "#64748b" }}>
                     Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeModel.label} identify food better.
                   </div>
                 </div>
@@ -461,7 +570,7 @@ export default function App() {
                     AI Model: {activeModel.label}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                    Single-stage analysis for fast, reliable results on all devices
+                    Optimized two-stage analysis tuned for responsive performance on any device
                   </div>
                 </div>
 
@@ -474,8 +583,8 @@ export default function App() {
                       minWidth: 160,
                       border: 0,
                       borderRadius: 18,
-                      padding: "16px 24px",
-                      fontSize: 16,
+                      padding: layoutMetrics.analyzeButtonPadding,
+                      fontSize: layoutMetrics.analyzeButtonFontSize,
                       fontWeight: 600,
                       color: "#fff",
                       background: disableAnalyze
@@ -492,7 +601,7 @@ export default function App() {
                     onClick={onClear}
                     disabled={loading}
                     style={{
-                      padding: "16px 24px",
+                      padding: layoutMetrics.analyzeButtonPadding,
                       borderRadius: 18,
                       border: "1px solid rgba(148,163,184,0.5)",
                       background: "rgba(255,255,255,0.8)",
@@ -505,7 +614,25 @@ export default function App() {
                   </button>
                 </div>
 
-                <input id="fileInput" type="file" accept="image/*" onChange={onSelect} style={{ display: "none" }} />
+                <input
+                  ref={fileInputRef}
+                  id="fileInput"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={onSelect}
+                  style={{
+                    position: "absolute",
+                    width: 1,
+                    height: 1,
+                    padding: 0,
+                    margin: -1,
+                    overflow: "hidden",
+                    clip: "rect(0, 0, 0, 0)",
+                    whiteSpace: "nowrap",
+                    border: 0,
+                  }}
+                />
               </div>
 
               {loading && (
