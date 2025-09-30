@@ -244,12 +244,23 @@ async function identifyFoodItems(imageDataUrl: string, userDishDescription?: str
   console.log("Vision request body size:", JSON.stringify(body).length);
 
   const res = await makeVeniceRequest(body);
+  console.log("✅ Vision API response received, status:", res.status);
+  
   const data = await res.json();
+  console.log("📦 Vision API response parsed:", {
+    hasChoices: !!data?.choices,
+    choicesLength: data?.choices?.length,
+    hasContent: !!data?.choices?.[0]?.message?.content
+  });
+  
   const content = data?.choices?.[0]?.message?.content;
   
   if (!content) {
+    console.error("❌ Vision model returned no content:", data);
     throw new Error("No food identification returned from Venice vision model");
   }
+  
+  console.log("✅ Food description received, length:", content.length);
   
   return typeof content === "string" ? content : JSON.stringify(content);
 }
@@ -382,13 +393,26 @@ async function calculateNutrition(
 
   // Reasoning is disabled for speed - always use fastest response
 
+  console.log("🔄 Sending nutrition calculation request to:", selectedTextModel);
+  
   const res = await makeVeniceRequest(body);
+  console.log("✅ Nutrition API response received, status:", res.status);
+  
   const data = await res.json();
+  console.log("📦 Nutrition API response parsed:", {
+    hasChoices: !!data?.choices,
+    choicesLength: data?.choices?.length,
+    hasContent: !!data?.choices?.[0]?.message?.content
+  });
+  
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
+    console.error("❌ Nutrition model returned no content:", data);
     throw new Error("No nutrition content returned from Venice text model");
   }
 
+  console.log("✅ Nutrition content received, parsing JSON...");
+  
   let parsed: NutritionSummary;
   try {
     if (typeof content === "string") {
@@ -396,12 +420,18 @@ async function calculateNutrition(
       const end = content.lastIndexOf("}");
       const jsonStr = start >= 0 && end >= 0 ? content.slice(start, end + 1) : content;
       parsed = JSON.parse(jsonStr);
+      console.log("✅ Nutrition JSON parsed successfully");
     } else {
       parsed = content;
+      console.log("✅ Nutrition content was already an object");
     }
   } catch (e) {
+    console.error("❌ Failed to parse nutrition JSON:", e);
+    console.error("Raw content:", content);
     throw new Error("Failed to parse nutrition JSON");
   }
+  
+  console.log("✅ Two-stage analysis complete!");
   return parsed;
 }
 
@@ -538,12 +568,25 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
     ]
   } as const;
 
+  console.log("🔄 Sending single-stage request to:", selectedVisionModel);
+  
   const res = await makeVeniceRequest(body);
+  console.log("✅ Single-stage API response received, status:", res.status);
+  
   const data = await res.json();
+  console.log("📦 Single-stage response parsed:", {
+    hasChoices: !!data?.choices,
+    choicesLength: data?.choices?.length,
+    hasContent: !!data?.choices?.[0]?.message?.content
+  });
+  
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
+    console.error("❌ Vision model returned no content:", data);
     throw new Error("No nutrition content returned from Venice vision model");
   }
+
+  console.log("✅ Single-stage content received, parsing JSON...");
 
   let parsed: NutritionSummary;
   try {
@@ -552,12 +595,18 @@ async function analyzeSingleStage(imageDataUrl: string, userDishDescription?: st
       const end = content.lastIndexOf("}");
       const jsonStr = start >= 0 && end >= 0 ? content.slice(start, end + 1) : content;
       parsed = JSON.parse(jsonStr);
+      console.log("✅ Single-stage JSON parsed successfully");
     } else {
       parsed = content;
+      console.log("✅ Single-stage content was already an object");
     }
   } catch (e) {
+    console.error("❌ Failed to parse single-stage JSON:", e);
+    console.error("Raw content:", content);
     throw new Error("Failed to parse nutrition JSON");
   }
+  
+  console.log("✅ Single-stage analysis complete!");
   return parsed;
 }
 
