@@ -40,6 +40,7 @@ export type NutritionSummary = {
 
 export type AnalyzeImageOptions = {
   userDishDescription?: string;
+  language?: "english" | "french";
 };
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
@@ -193,9 +194,10 @@ Be extremely detailed and specific in your description.`,
 
 // Stage 2: Calculate nutrition from food description using text model
 async function calculateNutritionFromDescription(
-  foodDescription: string
+  foodDescription: string,
+  language: "english" | "french" = "english"
 ): Promise<NutritionSummary> {
-  console.log("🔢 Stage 2: Calculating nutrition with", TEXT_MODEL);
+  console.log("🔢 Stage 2: Calculating nutrition with", TEXT_MODEL, "in", language);
 
   const schema = {
     type: "object",
@@ -300,20 +302,38 @@ async function calculateNutritionFromDescription(
     },
   };
 
-  const requestBody = {
-    model: TEXT_MODEL,
-    temperature: 0.6,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "nutrition_summary",
-        schema: schema,
-      },
-    },
-    messages: [
-      {
-        role: "system",
-        content: `You are a precision nutrition analyst. Calculate accurate nutritional information based on food descriptions. Provide:
+  const languageInstructions = language === "french"
+    ? {
+        systemPrompt: `Vous êtes un analyste nutritionnel de précision. Calculez des informations nutritionnelles précises basées sur les descriptions d'aliments. Fournissez:
+- Détails complets des macronutriments et micronutriments
+- Tailles de portions réalistes avec poids en grammes
+- Estimations caloriques par aliment
+- Évaluation de la confiance avec raisonnement
+- Observations visuelles ayant guidé votre analyse
+- Allergènes et considérations diététiques
+
+Sortie UNIQUEMENT en JSON valide correspondant au schéma. Pas de markdown, pas de texte supplémentaire.`,
+        userPrompt: `Basé sur cette description détaillée d'aliments, calculez des informations nutritionnelles complètes:
+
+${foodDescription}
+
+EXIGENCES CRITIQUES:
+- TOUTES les valeurs numériques DOIVENT être des nombres entiers (pas de décimales)
+- Arrondissez tous les grammes, calories et milligrammes au nombre entier le plus proche
+- Calculez des tailles de portions et masses réalistes en grammes (en nombres entiers)
+- Décomposez les aliments individuels dans le tableau items[]
+- Incluez au moins 3 conseils nutritionnels exploitables dans notes[]
+- Fournissez 4 à 6 observations visuelles dans analysis.visualObservations
+- Expliquez la méthodologie d'estimation des portions dans analysis.portionEstimate
+- Détaillez le raisonnement de confiance dans analysis.confidenceNarrative
+- Listez les allergènes et précautions dans analysis.cautions
+- La confiance doit être entre 1-100 (pourcentage entier)
+- TOUS LES TEXTES dans le JSON doivent être en FRANÇAIS
+
+Retournez UNIQUEMENT l'objet JSON avec des VALEURS ENTIÈRES UNIQUEMENT, pas de formatage markdown, pas de décimales.`,
+      }
+    : {
+        systemPrompt: `You are a precision nutrition analyst. Calculate accurate nutritional information based on food descriptions. Provide:
 - Complete macro and micronutrient breakdowns
 - Realistic portion sizes with weights in grams
 - Individual food item calorie estimates
@@ -322,10 +342,7 @@ async function calculateNutritionFromDescription(
 - Allergens and dietary considerations
 
 Output ONLY valid JSON matching the schema. No markdown, no extra text.`,
-      },
-      {
-        role: "user",
-        content: `Based on this detailed food description, calculate comprehensive nutrition information:
+        userPrompt: `Based on this detailed food description, calculate comprehensive nutrition information:
 
 ${foodDescription}
 
@@ -342,6 +359,26 @@ CRITICAL REQUIREMENTS:
 - Confidence must be 1-100 (percentage integer)
 
 Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no decimals.`,
+      };
+
+  const requestBody = {
+    model: TEXT_MODEL,
+    temperature: 0.6,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "nutrition_summary",
+        schema: schema,
+      },
+    },
+    messages: [
+      {
+        role: "system",
+        content: languageInstructions.systemPrompt,
+      },
+      {
+        role: "user",
+        content: languageInstructions.userPrompt,
       },
     ],
   };
@@ -399,8 +436,9 @@ export async function analyzeImageWithVenice(
   file: File,
   options: AnalyzeImageOptions = {}
 ): Promise<NutritionSummary> {
+  const language = options.language || "english";
   console.log("🚀 Starting two-stage analysis");
-  console.log(`Vision: ${VISION_MODEL} | Nutrition: ${TEXT_MODEL}`);
+  console.log(`Vision: ${VISION_MODEL} | Nutrition: ${TEXT_MODEL} | Language: ${language}`);
 
   // Resize and convert image
   const imageDataUrl = await resizeImageToJpeg(file);
@@ -412,8 +450,8 @@ export async function analyzeImageWithVenice(
     options.userDishDescription?.trim()
   );
 
-  // Stage 2: Text model calculates nutrition
-  const result = await calculateNutritionFromDescription(foodDescription);
+  // Stage 2: Text model calculates nutrition with language support
+  const result = await calculateNutritionFromDescription(foodDescription, language);
 
   console.log("✅ Analysis complete!");
   return result;

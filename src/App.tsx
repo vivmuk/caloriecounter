@@ -22,6 +22,8 @@ export default function App() {
   const [activeSection, setActiveSection] = React.useState<Section>("scan");
   const [dishHint, setDishHint] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
+  const [useFrench, setUseFrench] = React.useState(false);
+  const [analysisTime, setAnalysisTime] = React.useState<number | null>(null);
   const previousImageUrlRef = React.useRef<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -37,8 +39,9 @@ export default function App() {
     setImageState(value);
   }, []);
 
-  // Single model for everything - simple and fast
-  const activeModel = { label: "Mistral 3.1 24B Vision" };
+  // Two-stage AI pipeline
+  const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
+  const textModel = { label: "Qwen3 Next 80B", role: "Nutrition Analysis" };
 
   React.useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -185,10 +188,16 @@ export default function App() {
     if (!file) return;
     setLoading(true);
     setError(null);
+    setAnalysisTime(null);
+    const startTime = performance.now();
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
+        language: useFrench ? "french" : "english",
       });
+      const endTime = performance.now();
+      const timeInSeconds = ((endTime - startTime) / 1000).toFixed(1);
+      setAnalysisTime(parseFloat(timeInSeconds));
       setResult(summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to analyze image");
@@ -203,6 +212,7 @@ export default function App() {
     setResult(null);
     setError(null);
     setDishHint("");
+    setAnalysisTime(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -274,7 +284,7 @@ export default function App() {
           <p
             style={{ margin: 0, color: "#475569", fontSize: layoutMetrics.heroSubtitleSize, lineHeight: 1.6 }}
           >
-            Capture a meal, optionally describe the dish, and let {activeModel.label} analyze every pixel for a deep nutrition
+            Capture a meal, optionally describe the dish, and let our AI pipeline analyze every pixel for a deep nutrition
             readout in seconds.
           </p>
         </header>
@@ -523,17 +533,98 @@ export default function App() {
                     disabled={loading}
                   />
                   <div style={{ fontSize: layoutMetrics.hintFontSize, color: "#64748b" }}>
-                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps {activeModel.label} identify food better.
+                    Hint: more context (e.g., "grilled salmon with quinoa and roasted veggies") helps the AI identify food better.
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ fontWeight: 600, color: "#334155", textAlign: "center" }}>
-                    AI Model: {activeModel.label}
+                    Two-Stage AI Pipeline
                   </div>
-                  <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                    Optimized two-stage analysis tuned for responsive performance on any device
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: isMobile ? "1fr" : "1fr auto 1fr",
+                    gap: isMobile ? 8 : 12, 
+                    alignItems: "center",
+                    fontSize: 12,
+                  }}>
+                    <div style={{
+                      background: "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(129,140,248,0.1) 100%)",
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(99,102,241,0.2)",
+                      textAlign: "center",
+                    }}>
+                      <div style={{ fontWeight: 600, color: "#4338ca", marginBottom: 4 }}>Stage 1</div>
+                      <div style={{ color: "#1e293b", fontWeight: 500 }}>{visionModel.label}</div>
+                      <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{visionModel.role}</div>
+                    </div>
+                    {!isMobile && <div style={{ color: "#94a3b8", fontWeight: 600 }}>→</div>}
+                    <div style={{
+                      background: "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(168,85,247,0.1) 100%)",
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(139,92,246,0.2)",
+                      textAlign: "center",
+                    }}>
+                      <div style={{ fontWeight: 600, color: "#7c3aed", marginBottom: 4 }}>Stage 2</div>
+                      <div style={{ color: "#1e293b", fontWeight: 500 }}>{textModel.label}</div>
+                      <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{textModel.role}</div>
+                    </div>
                   </div>
+                </div>
+
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 16px",
+                  background: "rgba(248,250,252,0.9)",
+                  borderRadius: 14,
+                  border: "1px solid rgba(148,163,184,0.3)",
+                }}>
+                  <label htmlFor="frenchToggle" style={{ 
+                    fontWeight: 600, 
+                    color: "#334155",
+                    fontSize: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}>
+                    <span>🇫🇷</span>
+                    Generate report in French
+                  </label>
+                  <button
+                    id="frenchToggle"
+                    onClick={() => setUseFrench(!useFrench)}
+                    disabled={loading}
+                    style={{
+                      width: 52,
+                      height: 28,
+                      borderRadius: 14,
+                      border: "2px solid",
+                      borderColor: useFrench ? "#4f46e5" : "rgba(148,163,184,0.5)",
+                      background: useFrench 
+                        ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" 
+                        : "rgba(203,213,225,0.8)",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      position: "relative",
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute",
+                      top: 2,
+                      left: useFrench ? "calc(100% - 22px)" : "2px",
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      background: "#fff",
+                      transition: "left 0.3s ease",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                    }} />
+                  </button>
                 </div>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -557,7 +648,7 @@ export default function App() {
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    {loading ? `Analyzing with ${activeModel.label}...` : "Analyze meal"}
+                    {loading ? "Analyzing with AI pipeline..." : "Analyze meal"}
                   </button>
                   <button
                     onClick={onClear}
@@ -628,6 +719,24 @@ export default function App() {
                   border: "1px solid rgba(99,102,241,0.18)",
                   boxShadow: "0 40px 70px -40px rgba(79,70,229,0.6)",
                 }}>
+                  {analysisTime !== null && (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      marginBottom: 20,
+                      padding: "10px 18px",
+                      background: "rgba(79,70,229,0.1)",
+                      borderRadius: 16,
+                      color: "#4338ca",
+                      fontWeight: 600,
+                      fontSize: 14,
+                    }}>
+                      <span>⚡</span>
+                      Analysis completed in {analysisTime}s
+                    </div>
+                  )}
                   <NutritionSummaryView data={result} />
                 </div>
               )}
@@ -647,7 +756,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app uses {activeModel.label} powered by Venice AI to analyze food images and calculate detailed nutrition information in a single pass.
+                  The app uses a two-stage AI pipeline powered by Venice AI: {visionModel.label} for food identification and {textModel.label} for precision nutrition calculation.
                 </p>
               </div>
 
@@ -661,7 +770,7 @@ export default function App() {
                   description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
                 }, {
                   title: "2. AI analysis",
-                  description: `${activeModel.label} identifies food items, estimates portions, and calculates precise macro and micronutrient breakdowns in one go.`,
+                  description: `${visionModel.label} identifies food items and estimates portions, then ${textModel.label} calculates precise macro and micronutrient breakdowns.`,
                 }, {
                   title: "3. Explainable output",
                   description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",
