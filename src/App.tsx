@@ -672,7 +672,6 @@ export default function App() {
                   id="fileInput"
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={onSelect}
                   style={{ display: "none" }}
                 />
