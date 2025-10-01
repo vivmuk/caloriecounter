@@ -54,8 +54,8 @@ const TEXT_MODEL = "qwen3-next-80b";
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
   file: File,
-  maxDimension = 720,
-  quality = 0.8
+  maxDimension = 800,
+  quality = 0.85
 ): Promise<string> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -128,39 +128,6 @@ async function callVeniceAPI(body: any): Promise<any> {
   }
 }
 
-type VeniceContent =
-  | string
-  | Array<{ text?: string; type?: string; content?: string }>
-  | { text?: string; type?: string; content?: string };
-
-function extractMessageText(content: VeniceContent | undefined): string {
-  if (!content) return "";
-
-  if (typeof content === "string") {
-    return content.trim();
-  }
-
-  const readPart = (part: unknown): string => {
-    if (!part) return "";
-    if (typeof part === "string") return part;
-    if (typeof part === "object") {
-      const maybeText =
-        (part as { text?: string }).text ??
-        (part as { content?: string }).content;
-      if (typeof maybeText === "string") {
-        return maybeText;
-      }
-    }
-    return "";
-  };
-
-  if (Array.isArray(content)) {
-    return content.map((part) => readPart(part)).join("").trim();
-  }
-
-  return readPart(content).trim();
-}
-
 // Stage 1: Identify food items from image using vision model
 async function identifyFoodFromImage(
   imageDataUrl: string,
@@ -214,15 +181,14 @@ Be extremely detailed and specific in your description.`,
 
   const data = await callVeniceAPI(requestBody);
 
-  const rawContent = data?.choices?.[0]?.message?.content as VeniceContent | undefined;
-  const content = extractMessageText(rawContent);
+  const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     console.error("No content from vision model:", data);
     throw new Error("Vision model returned no food description");
   }
 
   console.log("✅ Food identified, description length:", content.length);
-  return content;
+  return typeof content === "string" ? content : JSON.stringify(content);
 }
 
 // Stage 2: Calculate nutrition from food description using text model
@@ -363,25 +329,26 @@ Output ONLY valid JSON matching the schema. No markdown, no extra text.`,
 
 ${foodDescription}
 
-Requirements:
-- Calculate realistic portion sizes and mass in grams
+CRITICAL REQUIREMENTS:
+- ALL numeric values MUST be whole integers (no decimals)
+- Round all grams, calories, and milligrams to nearest whole number
+- Calculate realistic portion sizes and mass in grams (as integers)
 - Break down individual food items in the items[] array
 - Include at least 3 actionable insights in notes[]
 - Provide 4-6 visual observations in analysis.visualObservations
 - Explain portion estimation methodology in analysis.portionEstimate
 - Detail confidence reasoning in analysis.confidenceNarrative
 - List allergens and cautions in analysis.cautions
-- Confidence must be 1-100 (percentage, not decimal)
+- Confidence must be 1-100 (percentage integer)
 
-Return ONLY the JSON object, no markdown formatting.`,
+Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no decimals.`,
       },
     ],
   };
 
   const data = await callVeniceAPI(requestBody);
 
-  const rawContent = data?.choices?.[0]?.message?.content as VeniceContent | undefined;
-  const content = extractMessageText(rawContent);
+  const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     console.error("No content from text model:", data);
     throw new Error("Nutrition calculation returned no content");
@@ -389,36 +356,41 @@ Return ONLY the JSON object, no markdown formatting.`,
 
   console.log("✅ Nutrition calculated, parsing JSON...");
 
-  // Parse JSON response
+  // Parse JSON response with cleaning
   let parsed: NutritionSummary;
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? jsonMatch[0] : content;
-    const parsedData = JSON.parse(jsonStr) as NutritionSummary & {
-      confidence: number | string;
-      totalCalories: number | string;
-    };
-
-    const coerceNumber = (value: number | string): number => {
-      const numeric = typeof value === "number" ? value : Number(value);
-      return Number.isFinite(numeric) ? numeric : 0;
-    };
-
-    if (typeof parsedData.confidence !== "number") {
-      parsedData.confidence = coerceNumber(parsedData.confidence);
+    let jsonStr: string;
+    
+    if (typeof content === "string") {
+      // Extract JSON from potential markdown
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      jsonStr = jsonMatch ? jsonMatch[0] : content;
+      
+      // Clean up malformed JSON:
+      // 1. Replace tabs with spaces
+      jsonStr = jsonStr.replace(/\t/g, " ");
+      
+      // 2. Fix extremely long decimal numbers (truncate completely)
+      jsonStr = jsonStr.replace(/(\d+)\.\d{50,}/g, "$1");
+      
+      // 3. Round all remaining decimals to integers for numeric fields
+      jsonStr = jsonStr.replace(/:\s*(\d+)\.\d+/g, ": $1");
+      
+      // 4. Remove trailing commas before closing braces/brackets
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
+      
+      console.log("🧹 JSON cleaned, attempting parse...");
+      parsed = JSON.parse(jsonStr);
+    } else {
+      parsed = content;
     }
-    if (typeof parsedData.totalCalories !== "number") {
-      parsedData.totalCalories = coerceNumber(parsedData.totalCalories);
-    }
-
-    parsed = parsedData;
 
     console.log("✅ Two-stage analysis complete!");
     return parsed;
   } catch (error) {
-    console.error("Failed to parse nutrition JSON:", error);
+    console.error("❌ Failed to parse nutrition JSON:", error);
     console.error("Raw content:", content);
-    throw new Error("Failed to parse nutrition data from response");
+    throw new Error("Failed to parse nutrition data. The model returned invalid JSON format.");
   }
 }
 
