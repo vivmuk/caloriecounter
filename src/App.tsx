@@ -24,10 +24,27 @@ export default function App() {
   const [isMobile, setIsMobile] = React.useState(false);
   const [useFrench, setUseFrench] = React.useState(false);
   const [analysisTime, setAnalysisTime] = React.useState<number | null>(null);
+  const [analysisElapsed, setAnalysisElapsed] = React.useState(0);
+  const [progress, setProgress] = React.useState(0);
   const previousImageUrlRef = React.useRef<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const analysisStartRef = React.useRef<number | null>(null);
+  const progressIntervalRef = React.useRef<number | null>(null);
+  const timerIntervalRef = React.useRef<number | null>(null);
+
+  const clearAnalysisIntervals = React.useCallback(() => {
+    if (progressIntervalRef.current !== null) {
+      window.clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+
+    if (timerIntervalRef.current !== null) {
+      window.clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  }, []);
 
   const setImage = React.useCallback((value: string | null) => {
     const previous = previousImageUrlRef.current;
@@ -41,7 +58,48 @@ export default function App() {
 
   // Two-stage AI pipeline
   const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
-  const textModel = { label: "Qwen3 Next 80B", role: "Nutrition Analysis" };
+  const textModel = { label: "Mistral 3.1 24B", role: "Nutrition Analysis" };
+
+  React.useEffect(() => {
+    return () => {
+      clearAnalysisIntervals();
+    };
+  }, [clearAnalysisIntervals]);
+
+  React.useEffect(() => {
+    if (loading) {
+      if (progressIntervalRef.current === null) {
+        progressIntervalRef.current = window.setInterval(() => {
+          setProgress((prev) => {
+            if (prev >= 95) {
+              return prev;
+            }
+
+            const increment = 5 + Math.random() * 8;
+            return Math.min(prev + increment, 95);
+          });
+        }, 400);
+      }
+
+      if (timerIntervalRef.current === null) {
+        timerIntervalRef.current = window.setInterval(() => {
+          if (analysisStartRef.current !== null) {
+            const elapsedMs = performance.now() - analysisStartRef.current;
+            setAnalysisElapsed(Math.max(0, elapsedMs / 1000));
+          }
+        }, 100);
+      }
+    } else {
+      clearAnalysisIntervals();
+      analysisStartRef.current = null;
+      setAnalysisElapsed(0);
+      setProgress((prev) => (prev === 100 ? prev : 0));
+    }
+
+    return () => {
+      clearAnalysisIntervals();
+    };
+  }, [loading, clearAnalysisIntervals]);
 
   React.useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -186,10 +244,15 @@ export default function App() {
 
   async function onAnalyze() {
     if (!file) return;
+    clearAnalysisIntervals();
+    analysisStartRef.current = performance.now();
+    setAnalysisElapsed(0);
+    setProgress(0);
     setLoading(true);
     setError(null);
     setAnalysisTime(null);
-    const startTime = performance.now();
+    let succeeded = false;
+    const startTime = analysisStartRef.current ?? performance.now();
     try {
       const summary = await analyzeImageWithVenice(file, {
         userDishDescription: dishHint.trim() || undefined,
@@ -199,20 +262,30 @@ export default function App() {
       const timeInSeconds = ((endTime - startTime) / 1000).toFixed(1);
       setAnalysisTime(parseFloat(timeInSeconds));
       setResult(summary);
+      setProgress(100);
+      succeeded = true;
     } catch (err) {
+      setProgress(0);
       setError(err instanceof Error ? err.message : "Failed to analyze image");
     } finally {
       setLoading(false);
+      if (!succeeded) {
+        analysisStartRef.current = null;
+      }
     }
   }
 
   function onClear() {
+    clearAnalysisIntervals();
     setFile(null);
     setImage(null);
     setResult(null);
     setError(null);
     setDishHint("");
     setAnalysisTime(null);
+    setAnalysisElapsed(0);
+    setProgress(0);
+    analysisStartRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -242,6 +315,7 @@ export default function App() {
   );
 
   const disableAnalyze = !file || loading;
+  const progressValue = Math.max(0, Math.min(100, progress));
 
   return (
     <div style={{
@@ -678,23 +752,68 @@ export default function App() {
               </div>
 
               {loading && (
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  justifyContent: "center",
-                  color: "#4f46e5",
-                  fontWeight: 600,
-                }}>
-                  <div style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: "50%",
-                    border: "3px solid rgba(99,102,241,0.25)",
-                    borderTopColor: "#4f46e5",
-                    animation: "spin 1s linear infinite",
-                  }} />
-                  Generating a detailed nutrition profile...
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 12,
+                    justifyItems: "center",
+                    padding: isMobile ? 16 : 20,
+                    background: "rgba(79,70,229,0.08)",
+                    borderRadius: 20,
+                    border: "1px solid rgba(79,70,229,0.2)",
+                    color: "#4338ca",
+                    fontWeight: 600,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: "50%",
+                        border: "3px solid rgba(99,102,241,0.2)",
+                        borderTopColor: "#4f46e5",
+                        animation: "spin 0.9s linear infinite",
+                      }}
+                    />
+                    Analyzing meal with the Mistral pipeline...
+                  </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      maxWidth: isMobile ? "100%" : 420,
+                      height: 10,
+                      background: "rgba(79,70,229,0.18)",
+                      borderRadius: 999,
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        transformOrigin: "left center",
+                        width: `${progressValue}%`,
+                        background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                        boxShadow: "0 10px 20px -15px rgba(79,70,229,0.8)",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 16,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 13,
+                      color: "#4f46e5",
+                    }}
+                  >
+                    <span>Elapsed time: {analysisElapsed.toFixed(1)}s</span>
+                    <span>Progress: {Math.round(progressValue)}%</span>
+                  </div>
                 </div>
               )}
 
