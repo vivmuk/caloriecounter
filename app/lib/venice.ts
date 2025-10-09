@@ -49,8 +49,8 @@ const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 // Vision model for food identification
 const VISION_MODEL = "mistral-31-24b";
 
-// Text model for nutrition calculation (aligned with vision model)
-const TEXT_MODEL = "mistral-31-24b";
+// Text model for nutrition calculation
+const TEXT_MODEL = "qwen3-next-80b";
 
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
@@ -85,7 +85,7 @@ async function resizeImageToJpeg(
 // Make API request to Venice
 async function callVeniceAPI(body: any): Promise<any> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 180_000); // 3 minute timeout
+  const timeout = setTimeout(() => controller.abort(), 300_000); // 5 minute timeout
 
   try {
     const response = await fetch(VENICE_API_URL, {
