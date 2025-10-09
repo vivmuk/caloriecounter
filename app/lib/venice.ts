@@ -50,7 +50,7 @@ const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 const VISION_MODEL = "mistral-31-24b";
 
 // Text model for nutrition calculation
-const TEXT_MODEL = "qwen3-next-80b";
+const TEXT_MODEL = "venice-uncensored";
 
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
