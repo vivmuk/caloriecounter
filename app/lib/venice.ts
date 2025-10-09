@@ -50,7 +50,7 @@ const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 const VISION_MODEL = "mistral-31-24b";
 
 // Text model for nutrition calculation
-const TEXT_MODEL = "venice-uncensored";
+const TEXT_MODEL = "qwen3-235b";
 
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
@@ -89,12 +89,12 @@ async function callVeniceAPI(body: any): Promise<any> {
 
   try {
     const response = await fetch(VENICE_API_URL, {
-      method: "POST",
-      headers: {
+        method: "POST",
+        headers: {
         Authorization: `Bearer ${VENICE_API_KEY}`,
         "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+        },
+        body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -181,13 +181,13 @@ Be extremely detailed and specific in your description.`,
   };
 
   const data = await callVeniceAPI(requestBody);
-
+  
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     console.error("No content from vision model:", data);
     throw new Error("Vision model returned no food description");
   }
-
+  
   console.log("✅ Food identified, description length:", content.length);
   return typeof content === "string" ? content : JSON.stringify(content);
 }
@@ -384,7 +384,7 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
   };
 
   const data = await callVeniceAPI(requestBody);
-
+  
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     console.error("No content from text model:", data);

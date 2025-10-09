@@ -58,7 +58,7 @@ export default function App() {
 
   // Two-stage AI pipeline
   const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
-  const textModel = { label: "Mistral 3.1 24B", role: "Nutrition Analysis" };
+  const textModel = { label: "Venice Large 1.1 (Qwen3 235B)", role: "Nutrition Analysis" };
 
   React.useEffect(() => {
     return () => {
@@ -75,7 +75,9 @@ export default function App() {
               return prev;
             }
 
-            const increment = 5 + Math.random() * 8;
+            // Calibrated to reach 95% in ~25 seconds
+            // 25000ms / 400ms = 62.5 ticks, 95 / 62.5 = 1.52% per tick
+            const increment = 0.8 + Math.random() * 1.4; // Range: 0.8-2.2%, avg: 1.5%
             return Math.min(prev + increment, 95);
           });
         }, 400);
