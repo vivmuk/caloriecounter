@@ -49,8 +49,8 @@ const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 // Vision model for food identification
 const VISION_MODEL = "mistral-31-24b";
 
-// Text model for nutrition calculation
-const TEXT_MODEL = "qwen3-235b";
+// Text model for nutrition calculation - using fastest model
+const TEXT_MODEL = "llama-3.2-3b";
 
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
