@@ -967,11 +967,54 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
     }];
   }
   
-  // Create notes
+  // Extract analysis data from vision model if available
+  let analysisData = {
+    visualObservations: [
+      `Identified ${foodItem} from visual analysis`,
+      `Portion size: ${servings} serving${servings > 1 ? 's' : ''}`,
+      `Nutrition breakdown: ${proteinGrams}g protein, ${carbGrams}g carbs, ${fatGrams}g fat`,
+      `Total energy: ${calories} calories`
+    ],
+    portionEstimate: `Estimated ${servings} serving${servings > 1 ? 's' : ''} based on visual analysis`,
+    confidenceNarrative: `High confidence in food identification (${foodItem}), moderate confidence in portion size estimation`,
+    cautions: [
+      "Portion size is estimated from visual analysis",
+      "Nutrition values are calculated based on standard food databases",
+      "Individual variations in preparation may affect actual values"
+    ]
+  };
+  
+  // Try to extract detailed analysis from vision model
+  if (rawData.analysis || rawData.visual_analysis || rawData.detailed_analysis) {
+    console.log("🔍 Found analysis data from vision model");
+    const analysis = rawData.analysis || rawData.visual_analysis || rawData.detailed_analysis;
+    
+    if (analysis.visual_observations) {
+      analysisData.visualObservations = Array.isArray(analysis.visual_observations) 
+        ? analysis.visual_observations 
+        : [analysis.visual_observations];
+    }
+    if (analysis.portion_estimate) {
+      analysisData.portionEstimate = analysis.portion_estimate;
+    }
+    if (analysis.confidence_narrative) {
+      analysisData.confidenceNarrative = analysis.confidence_narrative;
+    }
+    if (analysis.cautions) {
+      analysisData.cautions = Array.isArray(analysis.cautions) 
+        ? analysis.cautions 
+        : [analysis.cautions];
+    }
+    
+    console.log("📊 Extracted analysis data:", analysisData);
+  }
+  
+  // Create notes with more specific information
   const notes = [
-    "Analysis based on visual identification",
-    "Portion size estimated from image",
-    "Nutrition values are approximate"
+    `Analysis completed for ${foodItem}`,
+    `Portion size: ${servings} serving${servings > 1 ? 's' : ''}`,
+    `Total calories: ${calories}`,
+    `Macros: ${proteinGrams}g protein, ${carbGrams}g carbs, ${fatGrams}g fat`
   ];
   
   const transformed: NutritionSummary = {
@@ -1007,16 +1050,7 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
     },
     items: items,
     notes: notes,
-    analysis: {
-      visualObservations: [
-        "Food item identified from image",
-        "Portion size estimated visually",
-        "Nutrition calculated based on standard values"
-      ],
-      portionEstimate: "Estimated from visual analysis",
-      confidenceNarrative: "High confidence in food identification, moderate confidence in portion size",
-      cautions: ["Portion size is estimated", "Nutrition values are approximate"]
-    }
+    analysis: analysisData
   };
   
   console.log("✅ Transformation complete:", transformed.title, transformed.totalCalories, "calories");
