@@ -36,11 +36,13 @@ export default function App() {
 
   const clearAnalysisIntervals = React.useCallback(() => {
     if (progressIntervalRef.current !== null) {
+      console.log("🧹 Clearing progress interval");
       window.clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
 
     if (timerIntervalRef.current !== null) {
+      console.log("🧹 Clearing timer interval");
       window.clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
@@ -71,6 +73,11 @@ export default function App() {
         progressIntervalRef.current = window.setInterval(() => {
           setProgress((prev) => {
             if (prev >= 95) {
+              // Clear interval when reaching target to prevent infinite loop
+              if (progressIntervalRef.current) {
+                window.clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
+              }
               return prev;
             }
 
@@ -80,6 +87,15 @@ export default function App() {
             return Math.min(prev + increment, 95);
           });
         }, 400);
+        
+        // Safety timeout: force stop progress after 30 seconds
+        setTimeout(() => {
+          if (progressIntervalRef.current) {
+            window.clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+            setProgress(95);
+          }
+        }, 30000);
       }
 
       if (timerIntervalRef.current === null) {
