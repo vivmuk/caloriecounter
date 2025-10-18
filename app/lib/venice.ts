@@ -738,8 +738,21 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
   let carbGrams = 0;
   let fatGrams = 0;
   
-  // Check if it's the new structure with ingredients array
-  if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
+  // Check if it's the new structure with nutritional_information
+  if (rawData.nutritional_information) {
+    console.log("📋 Processing nutritional_information structure");
+    const nutrition = rawData.nutritional_information;
+    console.log("Nutrition keys:", Object.keys(nutrition));
+    console.log("Nutrition values:", nutrition);
+    
+    calories = parseInt(nutrition.total_calories || nutrition.calories) || 0;
+    proteinGrams = parseInt(nutrition.protein) || 0;
+    carbGrams = parseInt(nutrition.carbohydrates || nutrition.carbs) || 0;
+    fatGrams = parseInt(nutrition.fat || nutrition.total_fat) || 0;
+    servings = parseInt(rawData.servings) || 1;
+    
+    console.log("Extracted values:", { calories, proteinGrams, carbGrams, fatGrams, servings });
+  } else if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
     console.log("📋 Processing ingredients array structure");
     const totalCalories = rawData.ingredients.reduce((sum: number, ingredient: any) => {
       const nutrition = ingredient.nutrition_per_samosa || ingredient.nutrition || {};
@@ -779,7 +792,15 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
   // Create items array
   let items: Array<{name: string, quantity: string, calories: number, massGrams?: number}> = [];
   
-  if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
+  if (rawData.nutritional_information) {
+    // Create single item from nutritional_information
+    items = [{
+      name: foodItem,
+      quantity: `${servings} serving${servings > 1 ? 's' : ''}`,
+      calories: calories,
+      massGrams: 150 * servings // Estimate 150g per serving
+    }];
+  } else if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
     // Create items from ingredients array
     items = rawData.ingredients.map((ingredient: any) => {
       const nutrition = ingredient.nutrition_per_samosa || ingredient.nutrition || {};
