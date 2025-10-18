@@ -737,6 +737,10 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
   let proteinGrams = 0;
   let carbGrams = 0;
   let fatGrams = 0;
+  let fiberGrams = 0;
+  let sugarGrams = 0;
+  let saturatedFatGrams = 0;
+  let unsaturatedFatGrams = 0;
   
   // Check if it's the new structure with nutritional_information
   if (rawData.nutritional_information) {
@@ -763,10 +767,10 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
     ) || 0;
     
     carbGrams = parseInt(
+      nutrition.total_carbohydrates ||
       nutrition.carbohydrates || 
       nutrition.carbs || 
       nutrition.carbohydrate ||
-      nutrition.total_carbohydrates ||
       nutrition.carb_g ||
       nutrition.carb_grams ||
       0
@@ -783,6 +787,14 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
     servings = parseInt(rawData.servings) || 1;
     
     console.log("Extracted values:", { calories, proteinGrams, carbGrams, fatGrams, servings });
+    
+    // Extract additional nutrition details
+    fiberGrams = parseInt(nutrition.dietary_fiber || nutrition.fiber) || 0;
+    sugarGrams = parseInt(nutrition.sugars || nutrition.sugar) || 0;
+    saturatedFatGrams = parseInt(nutrition.saturated_fat || nutrition.sat_fat) || 0;
+    unsaturatedFatGrams = fatGrams - saturatedFatGrams; // Calculate unsaturated fat
+    
+    console.log("Additional nutrition:", { fiberGrams, sugarGrams, saturatedFatGrams, unsaturatedFatGrams });
     
     // If still no data, try to extract from any nested structure
     if (calories === 0 && proteinGrams === 0 && carbGrams === 0 && fatGrams === 0) {
@@ -912,6 +924,13 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
     };
     
     console.log("Extracted micronutrients:", micros);
+    console.log("Available micronutrient fields:", {
+      sodium: nutrition.sodium,
+      cholesterol: nutrition.cholesterol,
+      calcium: nutrition.calcium,
+      iron: nutrition.iron,
+      vitamin_c: nutrition.vitamin_c
+    });
   }
   
   // Create items array
@@ -968,14 +987,14 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
       carbs: {
         grams: carbGrams,
         calories: carbCalories,
-        fiber: parseInt(micros.fiber) || 0,
-        sugar: parseInt(micros.sugar) || 0
+        fiber: fiberGrams || parseInt(micros.fiber) || 0,
+        sugar: sugarGrams || parseInt(micros.sugar) || 0
       },
       fat: {
         grams: fatGrams,
         calories: fatCalories,
-        saturated: parseInt(micros.saturated_fat) || 0,
-        unsaturated: parseInt(micros.unsaturated_fat) || 0
+        saturated: saturatedFatGrams || parseInt(micros.saturated_fat) || 0,
+        unsaturated: unsaturatedFatGrams || parseInt(micros.unsaturated_fat) || 0
       }
     },
     micronutrients: {
