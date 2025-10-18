@@ -75,8 +75,8 @@ type ProcessedImage = {
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
   file: File,
-  maxDimension = 800,
-  quality = 0.85
+  maxDimension = 600,  // Reduced from 800 to limit size
+  quality = 0.8         // Reduced from 0.85 to limit size
 ): Promise<ProcessedImage> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -705,10 +705,13 @@ async function analyzeSingleStage(
         .replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted strings
       
       console.log("🧹 Cleaned JSON preview:", cleanedJson.substring(0, 300) + "...");
-      parsed = JSON.parse(cleanedJson);
+      const rawData = JSON.parse(cleanedJson);
+      
+      // Transform vision model output to expected NutritionSummary format
+      parsed = transformVisionModelOutput(rawData);
     } else {
       console.log("📦 Content is already parsed object");
-      parsed = content;
+      parsed = transformVisionModelOutput(content);
     }
   } catch (error) {
     console.error("❌ Failed to parse single-stage JSON:", error);
@@ -718,6 +721,93 @@ async function analyzeSingleStage(
   }
   
   return parsed;
+}
+
+// Transform vision model output to expected NutritionSummary format
+function transformVisionModelOutput(rawData: any): NutritionSummary {
+  console.log("🔄 Transforming vision model output...");
+  
+  // Handle different possible structures from vision model
+  const foodItem = rawData.food_item || rawData.title || "Unknown Food";
+  const calories = parseInt(rawData.calories) || 0;
+  const servings = parseInt(rawData.servings) || 1;
+  
+  // Extract macronutrients
+  const macros = rawData.macronutrients || rawData.macros || {};
+  const proteinGrams = parseInt(macros.protein) || 0;
+  const carbGrams = parseInt(macros.carbohydrates || macros.carbs) || 0;
+  const fatGrams = parseInt(macros.total_fat || macros.fat) || 0;
+  
+  // Calculate calories from macros (4 cal/g protein, 4 cal/g carbs, 9 cal/g fat)
+  const proteinCalories = proteinGrams * 4;
+  const carbCalories = carbGrams * 4;
+  const fatCalories = fatGrams * 9;
+  
+  // Extract micronutrients
+  const micros = rawData.micronutrients || {};
+  
+  // Create items array
+  const items = [{
+    name: foodItem,
+    quantity: `${servings} serving${servings > 1 ? 's' : ''}`,
+    calories: calories,
+    massGrams: 150 // Default estimate
+  }];
+  
+  // Create notes
+  const notes = [
+    "Analysis based on visual identification",
+    "Portion size estimated from image",
+    "Nutrition values are approximate"
+  ];
+  
+  const transformed: NutritionSummary = {
+    title: foodItem,
+    confidence: 85, // Default confidence
+    servingDescription: `${servings} serving${servings > 1 ? 's' : ''} of ${foodItem}`,
+    totalCalories: calories,
+    macros: {
+      protein: {
+        grams: proteinGrams,
+        calories: proteinCalories
+      },
+      carbs: {
+        grams: carbGrams,
+        calories: carbCalories,
+        fiber: parseInt(micros.fiber) || 0,
+        sugar: parseInt(micros.sugar) || 0
+      },
+      fat: {
+        grams: fatGrams,
+        calories: fatCalories,
+        saturated: parseInt(micros.saturated_fat) || 0,
+        unsaturated: parseInt(micros.unsaturated_fat) || 0
+      }
+    },
+    micronutrients: {
+      sodiumMg: parseInt(micros.sodium) || 0,
+      potassiumMg: parseInt(micros.potassium) || 0,
+      cholesterolMg: parseInt(micros.cholesterol) || 0,
+      calciumMg: parseInt(micros.calcium) || 0,
+      ironMg: parseInt(micros.iron) || 0,
+      vitaminCMg: parseInt(micros.vitamin_C) || 0
+    },
+    items: items,
+    notes: notes,
+    analysis: {
+      visualObservations: [
+        "Food item identified from image",
+        "Portion size estimated visually",
+        "Nutrition calculated based on standard values"
+      ],
+      portionEstimate: "Estimated from visual analysis",
+      confidenceNarrative: "High confidence in food identification, moderate confidence in portion size",
+      cautions: ["Portion size is estimated", "Nutrition values are approximate"]
+    }
+  };
+  
+  console.log("✅ Transformation complete:", transformed.title, transformed.totalCalories, "calories");
+  return transformed;
 }
 
 // Main export: Analyze image with single-stage approach using vision model
