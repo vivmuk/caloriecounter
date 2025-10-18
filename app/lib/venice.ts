@@ -63,8 +63,8 @@ function getEnv(name: string): string | undefined {
 const VISION_MODEL =
   getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
-// Text model for nutrition calculation - defaults to a model that supports structured outputs
-const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "qwen3-next-80b";
+// Text model for nutrition calculation - using stable model with JSON schema support
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "qwen3-235b";
 
 type ProcessedImage = {
   dataUrl: string;
@@ -131,6 +131,14 @@ async function callVeniceAPI(body: any): Promise<any> {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Venice API error:", response.status, errorText);
+      
+      // Handle 404 errors (model not found) with helpful message
+      if (response.status === 404) {
+        throw new Error(
+          `Model not found (404). The selected model may not be available. Please try again or contact support.`
+        );
+      }
+      
       throw new Error(
         `Venice API error (${response.status}): ${errorText || "Unknown error"}`
       );
