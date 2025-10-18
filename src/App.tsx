@@ -57,8 +57,8 @@ export default function App() {
   }, []);
 
   // Two-stage AI pipeline
-  const visionModel = { label: "Llama 3.2 11B Vision", role: "Food Identification" };
-  const textModel = { label: "Llama 3.3 70B", role: "Nutrition Analysis" };
+  const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
+  const textModel = { label: "Qwen 3 Next 80B", role: "Nutrition Analysis" };
 
   React.useEffect(() => {
     return () => {
@@ -778,7 +778,7 @@ export default function App() {
                         animation: "spin 0.9s linear infinite",
                       }}
                     />
-                    Analyzing meal with the Mistral pipeline...
+                    Analyzing meal with the Venice nutrition pipeline...
                   </div>
                   <div
                     style={{

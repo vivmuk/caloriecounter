@@ -63,8 +63,8 @@ function getEnv(name: string): string | undefined {
 const VISION_MODEL =
   getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
-// Text model for nutrition calculation - using fastest model with JSON support
-const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "llama-3.3-70b";
+// Text model for nutrition calculation - defaults to a model that supports structured outputs
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "qwen3-next-80b";
 
 type ProcessedImage = {
   dataUrl: string;
@@ -449,42 +449,69 @@ CRITICAL REQUIREMENTS:
 Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no decimals.`,
       };
 
-  const requestBody = {
-    model: TEXT_MODEL,
-    temperature: 0.6,
-    venice_parameters: {
-      include_venice_system_prompt: true,
-    },
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "nutrition_summary",
-        schema: schema,
+  const buildRequestBody = (useSchema: boolean) => {
+    const body: Record<string, unknown> = {
+      model: TEXT_MODEL,
+      temperature: 0.6,
+      venice_parameters: {
+        include_venice_system_prompt: true,
       },
-    },
-    messages: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "text",
-            text: languageInstructions.systemPrompt,
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: languageInstructions.userPrompt,
-          },
-        ],
-      },
-    ],
+      messages: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: languageInstructions.systemPrompt,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: languageInstructions.userPrompt,
+            },
+          ],
+        },
+      ],
+    };
+
+    if (useSchema) {
+      body.response_format = {
+        type: "json_schema",
+        json_schema: {
+          name: "nutrition_summary",
+          schema: schema,
+        },
+      };
+    }
+
+    return body;
   };
 
-  const data = await callVeniceAPI(requestBody);
+  let data: any;
+  let usedSchema = true;
+  try {
+    data = await callVeniceAPI(buildRequestBody(true));
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message.toLowerCase() : String(error);
+    if (message.includes("response_format") && message.includes("not supported")) {
+      console.warn(
+        "⚠️ Selected model does not support response schemas. Retrying with manual JSON instructions."
+      );
+      usedSchema = false;
+      data = await callVeniceAPI(buildRequestBody(false));
+    } else {
+      throw error;
+    }
+  }
+
+  if (!usedSchema) {
+    console.log("ℹ️ Proceeding without response schema enforcement.");
+  }
 
   const content = extractTextFromResponse(data);
   if (!content) {
