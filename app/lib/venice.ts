@@ -63,8 +63,8 @@ function getEnv(name: string): string | undefined {
 const VISION_MODEL =
   getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
-// Text model for nutrition calculation - using Venice Uncensored 1.1
-const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "venice-uncensored";
+// Text model for nutrition calculation - using fastest model with JSON schema
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "llama-3.2-3b";
 
 type ProcessedImage = {
   dataUrl: string;
@@ -113,16 +113,16 @@ async function resizeImageToJpeg(
 // Make API request to Venice
 async function callVeniceAPI(body: any): Promise<any> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 300_000); // 5 minute timeout
+  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 minute timeout for faster model
 
   try {
     const response = await fetch(VENICE_API_URL, {
-      method: "POST",
-      headers: {
+        method: "POST",
+        headers: {
         Authorization: `Bearer ${VENICE_API_KEY}`,
         "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+        },
+        body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -458,24 +458,24 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       };
 
   const buildRequestBody = (useSchema: boolean) => {
-    const body: Record<string, unknown> = {
+  const body: Record<string, unknown> = {
       model: TEXT_MODEL,
       temperature: 0.6,
       venice_parameters: {
         include_venice_system_prompt: true,
       },
-      messages: [
-        {
-          role: "system",
+    messages: [
+      {
+        role: "system",
           content: [
             {
               type: "text",
               text: languageInstructions.systemPrompt,
             },
           ],
-        },
-        {
-          role: "user",
+      },
+      {
+        role: "user",
           content: [
             {
               type: "text",
@@ -552,8 +552,25 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       // 4. Remove trailing commas before closing braces/brackets
       jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
       
+      // 5. Fix common JSON issues
+      jsonStr = jsonStr.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Add quotes to unquoted keys
+      jsonStr = jsonStr.replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted string values
+      
       console.log("🧹 JSON cleaned, attempting parse...");
-      parsed = JSON.parse(jsonStr);
+      console.log("Cleaned JSON preview:", jsonStr.substring(0, 200) + "...");
+      
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.error("❌ JSON parse failed, trying fallback parsing...");
+        // Try to extract just the core JSON object
+        const coreMatch = jsonStr.match(/\{[\s\S]*"title"[\s\S]*\}/);
+        if (coreMatch) {
+          parsed = JSON.parse(coreMatch[0]);
+        } else {
+          throw parseError;
+        }
+      }
     } else {
       parsed = content;
     }
