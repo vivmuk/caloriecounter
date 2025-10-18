@@ -1,9 +1,18 @@
-import type { Handler } from "@netlify/functions";
-
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
-const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
+const VENICE_API_URL = "https://api.venice.ai/api/v1/responses";
 
-export const handler: Handler = async (event) => {
+type NetlifyEvent = {
+  httpMethod: string;
+  body?: string | null;
+};
+
+type NetlifyResponse = {
+  statusCode: number;
+  headers?: Record<string, string>;
+  body: string;
+};
+
+export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }

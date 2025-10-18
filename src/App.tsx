@@ -57,8 +57,8 @@ export default function App() {
   }, []);
 
   // Two-stage AI pipeline
-  const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
-  const textModel = { label: "Llama 3.2 3B", role: "Nutrition Analysis" };
+  const visionModel = { label: "Llama 3.2 11B Vision", role: "Food Identification" };
+  const textModel = { label: "Llama 3.3 70B", role: "Nutrition Analysis" };
 
   React.useEffect(() => {
     return () => {
