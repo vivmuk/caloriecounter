@@ -63,8 +63,8 @@ function getEnv(name: string): string | undefined {
 const VISION_MODEL =
   getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
-// Text model for nutrition calculation - using fastest model with JSON schema
-const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "llama-3.2-3b";
+// Text model for nutrition calculation - using stable model without reasoning
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "qwen3-235b";
 
 type ProcessedImage = {
   dataUrl: string;
@@ -113,7 +113,7 @@ async function resizeImageToJpeg(
 // Make API request to Venice
 async function callVeniceAPI(body: any): Promise<any> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 minute timeout for faster model
+  const timeout = setTimeout(() => controller.abort(), 300_000); // 5 minute timeout for stable model
 
   try {
     const response = await fetch(VENICE_API_URL, {
@@ -463,6 +463,8 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       temperature: 0.6,
       venice_parameters: {
         include_venice_system_prompt: true,
+        disable_thinking: true,
+        strip_thinking_response: true,
       },
     messages: [
       {
