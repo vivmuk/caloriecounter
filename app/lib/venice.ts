@@ -726,17 +726,47 @@ async function analyzeSingleStage(
 // Transform vision model output to expected NutritionSummary format
 function transformVisionModelOutput(rawData: any): NutritionSummary {
   console.log("🔄 Transforming vision model output...");
+  console.log("Raw data structure:", Object.keys(rawData));
   
   // Handle different possible structures from vision model
-  const foodItem = rawData.food_item || rawData.title || "Unknown Food";
-  const calories = parseInt(rawData.calories) || 0;
-  const servings = parseInt(rawData.servings) || 1;
+  const foodItem = rawData.dish_name || rawData.food_item || rawData.title || "Unknown Food";
   
-  // Extract macronutrients
-  const macros = rawData.macronutrients || rawData.macros || {};
-  const proteinGrams = parseInt(macros.protein) || 0;
-  const carbGrams = parseInt(macros.carbohydrates || macros.carbs) || 0;
-  const fatGrams = parseInt(macros.total_fat || macros.fat) || 0;
+  // Try to extract calories from different possible locations
+  let calories = 0;
+  let servings = 1;
+  let proteinGrams = 0;
+  let carbGrams = 0;
+  let fatGrams = 0;
+  
+  // Check if it's the new structure with ingredients array
+  if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
+    console.log("📋 Processing ingredients array structure");
+    const totalCalories = rawData.ingredients.reduce((sum: number, ingredient: any) => {
+      const nutrition = ingredient.nutrition_per_samosa || ingredient.nutrition || {};
+      const qty = parseInt(ingredient.quantity) || 1;
+      const itemCalories = parseInt(nutrition.calories) || 0;
+      return sum + (itemCalories * qty);
+    }, 0);
+    calories = totalCalories;
+    
+    // Calculate total macros from all ingredients
+    rawData.ingredients.forEach((ingredient: any) => {
+      const nutrition = ingredient.nutrition_per_samosa || ingredient.nutrition || {};
+      const qty = parseInt(ingredient.quantity) || 1;
+      proteinGrams += (parseInt(nutrition.protein) || 0) * qty;
+      carbGrams += (parseInt(nutrition.total_carbohydrates || nutrition.carbs) || 0) * qty;
+      fatGrams += (parseInt(nutrition.total_fat || nutrition.fat) || 0) * qty;
+    });
+  } else {
+    // Fallback to old structure
+    calories = parseInt(rawData.calories) || 0;
+    servings = parseInt(rawData.servings) || 1;
+    
+    const macros = rawData.macronutrients || rawData.macros || {};
+    proteinGrams = parseInt(macros.protein) || 0;
+    carbGrams = parseInt(macros.carbohydrates || macros.carbs) || 0;
+    fatGrams = parseInt(macros.total_fat || macros.fat) || 0;
+  }
   
   // Calculate calories from macros (4 cal/g protein, 4 cal/g carbs, 9 cal/g fat)
   const proteinCalories = proteinGrams * 4;
@@ -747,12 +777,30 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
   const micros = rawData.micronutrients || {};
   
   // Create items array
-  const items = [{
-    name: foodItem,
-    quantity: `${servings} serving${servings > 1 ? 's' : ''}`,
-    calories: calories,
-    massGrams: 150 // Default estimate
-  }];
+  let items: Array<{name: string, quantity: string, calories: number, massGrams?: number}> = [];
+  
+  if (rawData.ingredients && Array.isArray(rawData.ingredients)) {
+    // Create items from ingredients array
+    items = rawData.ingredients.map((ingredient: any) => {
+      const nutrition = ingredient.nutrition_per_samosa || ingredient.nutrition || {};
+      const qty = parseInt(ingredient.quantity) || 1;
+      const itemCalories = parseInt(nutrition.calories) || 0;
+      return {
+        name: ingredient.name || "Unknown Item",
+        quantity: `${qty} ${qty > 1 ? 'pieces' : 'piece'}`,
+        calories: itemCalories * qty,
+        massGrams: 50 * qty // Estimate 50g per piece
+      };
+    });
+  } else {
+    // Fallback to single item
+    items = [{
+      name: foodItem,
+      quantity: `${servings} serving${servings > 1 ? 's' : ''}`,
+      calories: calories,
+      massGrams: 150 // Default estimate
+    }];
+  }
   
   // Create notes
   const notes = [
@@ -807,6 +855,14 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
   };
   
   console.log("✅ Transformation complete:", transformed.title, transformed.totalCalories, "calories");
+  console.log("📊 Final data:", {
+    title: transformed.title,
+    calories: transformed.totalCalories,
+    protein: transformed.macros.protein.grams,
+    carbs: transformed.macros.carbs.grams,
+    fat: transformed.macros.fat.grams,
+    items: transformed.items?.length || 0
+  });
   return transformed;
 }
 
