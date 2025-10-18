@@ -1,5 +1,5 @@
-const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
-const VENICE_API_URL = "https://api.venice.ai/api/v1/responses";
+const VENICE_API_KEY = "n191pxahjwAE5VU5I8TmcPvPbKHJx0Z55VXToBj0kI";
+const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 
 type NetlifyEvent = {
   httpMethod: string;

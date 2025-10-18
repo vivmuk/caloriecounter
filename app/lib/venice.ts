@@ -43,14 +43,28 @@ export type AnalyzeImageOptions = {
   language?: "english" | "french";
 };
 
-const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
-const VENICE_API_URL = "https://api.venice.ai/api/v1/responses";
+const VENICE_API_KEY = "n191pxahjwAE5VU5I8TmcPvPbKHJx0Z55VXToBj0kI";
+const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
+
+function getEnv(name: string): string | undefined {
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    const env = import.meta.env as Record<string, string | undefined>;
+    return env[name] ?? env[`VITE_${name}`];
+  }
+
+  if (typeof process !== "undefined" && process.env) {
+    return process.env[name];
+  }
+
+  return undefined;
+}
 
 // Vision model for food identification
-const VISION_MODEL = "llama-3.2-11b-vision-instruct";
+const VISION_MODEL =
+  getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
 // Text model for nutrition calculation - using fastest model with JSON support
-const TEXT_MODEL = "llama-3.3-70b-instruct";
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "llama-3.3-70b";
 
 type ProcessedImage = {
   dataUrl: string;
@@ -204,13 +218,13 @@ async function identifyFoodFromImage(
 
   if (userHint) {
     userContent.push({
-      type: "input_text",
+      type: "text",
       text: `User hint: "${userHint}". Use this as context.`,
     });
   }
 
   userContent.push({
-    type: "input_text",
+    type: "text",
     text: `Analyze this food image in detail. Describe:
 1. All visible food items with specific names
 2. Preparation methods (grilled, fried, baked, etc.)
@@ -224,20 +238,24 @@ Be extremely detailed and specific in your description.`,
   });
 
   userContent.push({
-    type: "input_image",
-    media_type: processedImage.mediaType,
-    image_base64: processedImage.base64,
+    type: "image_url",
+    image_url: {
+      url: processedImage.dataUrl,
+    },
   });
 
   const requestBody = {
     model: VISION_MODEL,
     temperature: 0.6,
-    input: [
+    venice_parameters: {
+      include_venice_system_prompt: true,
+    },
+    messages: [
       {
         role: "system",
         content: [
           {
-            type: "input_text",
+            type: "text",
             text:
               "You are an expert food analyst. Analyze food images and provide comprehensive, detailed descriptions of all visible food items, portions, and preparation methods.",
           },
@@ -434,6 +452,9 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
   const requestBody = {
     model: TEXT_MODEL,
     temperature: 0.6,
+    venice_parameters: {
+      include_venice_system_prompt: true,
+    },
     response_format: {
       type: "json_schema",
       json_schema: {
@@ -441,12 +462,12 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
         schema: schema,
       },
     },
-    input: [
+    messages: [
       {
         role: "system",
         content: [
           {
-            type: "input_text",
+            type: "text",
             text: languageInstructions.systemPrompt,
           },
         ],
@@ -455,7 +476,7 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
         role: "user",
         content: [
           {
-            type: "input_text",
+            type: "text",
             text: languageInstructions.userPrompt,
           },
         ],
