@@ -44,20 +44,26 @@ export type AnalyzeImageOptions = {
 };
 
 const VENICE_API_KEY = "ntmhtbP2fr_pOQsmuLPuN_nm6lm2INWKiNcvrdEfEC";
-const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
+const VENICE_API_URL = "https://api.venice.ai/api/v1/responses";
 
 // Vision model for food identification
-const VISION_MODEL = "mistral-31-24b";
+const VISION_MODEL = "llama-3.2-11b-vision-instruct";
 
-// Text model for nutrition calculation - using fastest model
-const TEXT_MODEL = "llama-3.2-3b";
+// Text model for nutrition calculation - using fastest model with JSON support
+const TEXT_MODEL = "llama-3.3-70b-instruct";
+
+type ProcessedImage = {
+  dataUrl: string;
+  base64: string;
+  mediaType: string;
+};
 
 // Resize image to reduce payload size
 async function resizeImageToJpeg(
   file: File,
   maxDimension = 800,
   quality = 0.85
-): Promise<string> {
+): Promise<ProcessedImage> {
   const blobUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -79,7 +85,15 @@ async function resizeImageToJpeg(
 
   const dataUrl = canvas.toDataURL("image/jpeg", quality);
   URL.revokeObjectURL(blobUrl);
-  return dataUrl;
+  const [prefix, base64Data] = dataUrl.split(",", 2);
+  const mediaTypeMatch = prefix.match(/^data:(.*);base64$/);
+  const mediaType = mediaTypeMatch?.[1] ?? "image/jpeg";
+
+  return {
+    dataUrl,
+    base64: base64Data,
+    mediaType,
+  };
 }
 
 // Make API request to Venice
@@ -89,12 +103,12 @@ async function callVeniceAPI(body: any): Promise<any> {
 
   try {
     const response = await fetch(VENICE_API_URL, {
-        method: "POST",
-        headers: {
+      method: "POST",
+      headers: {
         Authorization: `Bearer ${VENICE_API_KEY}`,
         "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+      },
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -129,9 +143,59 @@ async function callVeniceAPI(body: any): Promise<any> {
   }
 }
 
+function extractTextFromResponse(data: any): string | undefined {
+  const choiceContent = data?.choices?.[0]?.message?.content;
+  if (typeof choiceContent === "string") {
+    return choiceContent;
+  }
+
+  if (Array.isArray(choiceContent)) {
+    const combined = choiceContent
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item?.text) return item.text;
+        if (item?.type === "output_text") return item.text;
+        if (item?.type === "text") return item.text;
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (combined) return combined;
+  }
+
+  const outputText = data?.output_text;
+  if (Array.isArray(outputText)) {
+    const combined = outputText.join("\n").trim();
+    if (combined) return combined;
+  }
+
+  const outputContent = data?.output ?? data?.response?.output;
+  if (Array.isArray(outputContent)) {
+    const combined = outputContent
+      .map((item: any) => {
+        const itemContent = item?.content;
+        if (typeof itemContent === "string") return itemContent;
+        if (Array.isArray(itemContent)) {
+          return itemContent
+            .map((child: any) => child?.text ?? "")
+            .filter(Boolean)
+            .join(" ");
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (combined) return combined;
+  }
+
+  return undefined;
+}
+
 // Stage 1: Identify food items from image using vision model
 async function identifyFoodFromImage(
-  imageDataUrl: string,
+  processedImage: ProcessedImage,
   userHint?: string
 ): Promise<string> {
   console.log("🔍 Stage 1: Identifying food with", VISION_MODEL);
@@ -140,13 +204,13 @@ async function identifyFoodFromImage(
 
   if (userHint) {
     userContent.push({
-      type: "text",
+      type: "input_text",
       text: `User hint: "${userHint}". Use this as context.`,
     });
   }
 
   userContent.push({
-    type: "text",
+    type: "input_text",
     text: `Analyze this food image in detail. Describe:
 1. All visible food items with specific names
 2. Preparation methods (grilled, fried, baked, etc.)
@@ -160,18 +224,24 @@ Be extremely detailed and specific in your description.`,
   });
 
   userContent.push({
-    type: "image_url",
-    image_url: { url: imageDataUrl },
+    type: "input_image",
+    media_type: processedImage.mediaType,
+    image_base64: processedImage.base64,
   });
 
   const requestBody = {
     model: VISION_MODEL,
     temperature: 0.6,
-    messages: [
+    input: [
       {
         role: "system",
-        content:
-          "You are an expert food analyst. Analyze food images and provide comprehensive, detailed descriptions of all visible food items, portions, and preparation methods.",
+        content: [
+          {
+            type: "input_text",
+            text:
+              "You are an expert food analyst. Analyze food images and provide comprehensive, detailed descriptions of all visible food items, portions, and preparation methods.",
+          },
+        ],
       },
       {
         role: "user",
@@ -181,15 +251,15 @@ Be extremely detailed and specific in your description.`,
   };
 
   const data = await callVeniceAPI(requestBody);
-  
-  const content = data?.choices?.[0]?.message?.content;
+
+  const content = extractTextFromResponse(data);
   if (!content) {
     console.error("No content from vision model:", data);
     throw new Error("Vision model returned no food description");
   }
-  
+
   console.log("✅ Food identified, description length:", content.length);
-  return typeof content === "string" ? content : JSON.stringify(content);
+  return content;
 }
 
 // Stage 2: Calculate nutrition from food description using text model
@@ -371,21 +441,31 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
         schema: schema,
       },
     },
-    messages: [
+    input: [
       {
         role: "system",
-        content: languageInstructions.systemPrompt,
+        content: [
+          {
+            type: "input_text",
+            text: languageInstructions.systemPrompt,
+          },
+        ],
       },
       {
         role: "user",
-        content: languageInstructions.userPrompt,
+        content: [
+          {
+            type: "input_text",
+            text: languageInstructions.userPrompt,
+          },
+        ],
       },
     ],
   };
 
   const data = await callVeniceAPI(requestBody);
-  
-  const content = data?.choices?.[0]?.message?.content;
+
+  const content = extractTextFromResponse(data);
   if (!content) {
     console.error("No content from text model:", data);
     throw new Error("Nutrition calculation returned no content");
@@ -441,12 +521,16 @@ export async function analyzeImageWithVenice(
   console.log(`Vision: ${VISION_MODEL} | Nutrition: ${TEXT_MODEL} | Language: ${language}`);
 
   // Resize and convert image
-  const imageDataUrl = await resizeImageToJpeg(file);
-  console.log("📷 Image processed, size:", imageDataUrl.length, "characters");
+  const processedImage = await resizeImageToJpeg(file);
+  console.log(
+    "📷 Image processed, base64 size:",
+    processedImage.base64.length,
+    "characters"
+  );
 
   // Stage 1: Vision model identifies food
   const foodDescription = await identifyFoodFromImage(
-    imageDataUrl,
+    processedImage,
     options.userDishDescription?.trim()
   );
 
