@@ -628,7 +628,17 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       // 4. Remove trailing commas before closing braces/brackets
       jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
       
-      // 5. Fix common JSON issues
+      // 5. Fix malformed quantity fields (e.g., "caloriesPerItem: 60," -> "3 pieces")
+      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+,"/g, '"quantity": "3 pieces"');
+      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+,"/g, '"quantity": "1 serving"');
+      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+"/g, '"quantity": "3 pieces"');
+      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+"/g, '"quantity": "1 serving"');
+      
+      // 5b. Fix any remaining malformed quantity fields with various patterns
+      jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*caloriesPer[^"]*"/g, '"quantity": "1 serving"');
+      jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*calories[^"]*"/g, '"quantity": "1 serving"');
+      
+      // 6. Fix common JSON issues
       jsonStr = jsonStr.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Add quotes to unquoted keys
       jsonStr = jsonStr.replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted string values
       
@@ -863,6 +873,12 @@ Return ONLY the JSON with INTEGER VALUES ONLY.`
         .replace(/(\d+)\.\d{50,}/g, "$1")      // Truncate long decimals
         .replace(/:\s*(\d+)\.\d+/g, ": $1")    // Round decimals to integers
         .replace(/,(\s*[}\]])/g, "$1")         // Remove trailing commas
+        .replace(/"quantity":\s*"caloriesPerItem:\s*\d+,"/g, '"quantity": "3 pieces"') // Fix malformed quantity fields
+        .replace(/"quantity":\s*"caloriesPerServing:\s*\d+,"/g, '"quantity": "1 serving"')
+        .replace(/"quantity":\s*"caloriesPerItem:\s*\d+"/g, '"quantity": "3 pieces"')
+        .replace(/"quantity":\s*"caloriesPerServing:\s*\d+"/g, '"quantity": "1 serving"')
+        .replace(/"quantity":\s*"[^"]*caloriesPer[^"]*"/g, '"quantity": "1 serving"') // Fix any remaining malformed quantity fields
+        .replace(/"quantity":\s*"[^"]*calories[^"]*"/g, '"quantity": "1 serving"')
         .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Add quotes to unquoted keys
         .replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted strings
       
