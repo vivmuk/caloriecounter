@@ -63,8 +63,8 @@ function getEnv(name: string): string | undefined {
 const VISION_MODEL =
   getEnv("VENICE_VISION_MODEL") ?? "mistral-31-24b";
 
-// Text model for nutrition calculation - using stable model with JSON schema support
-const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "qwen3-235b";
+// Text model for nutrition calculation - using Venice Uncensored 1.1
+const TEXT_MODEL = getEnv("VENICE_TEXT_MODEL") ?? "venice-uncensored";
 
 type ProcessedImage = {
   dataUrl: string;
