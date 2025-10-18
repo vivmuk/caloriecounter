@@ -56,9 +56,8 @@ export default function App() {
     setImageState(value);
   }, []);
 
-  // Two-stage AI pipeline
-  const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Identification" };
-  const textModel = { label: "Venice Large 1.1 (Qwen3 235B)", role: "Nutrition Analysis" };
+  // Single-stage AI pipeline
+  const visionModel = { label: "Mistral 3.1 24B Vision", role: "Food Analysis & Nutrition" };
 
   React.useEffect(() => {
     return () => {
@@ -615,13 +614,11 @@ export default function App() {
 
                 <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ fontWeight: 600, color: "#334155", textAlign: "center" }}>
-                    Two-Stage AI Pipeline
+                    Single-Stage AI Analysis
                   </div>
                   <div style={{ 
-                    display: "grid", 
-                    gridTemplateColumns: isMobile ? "1fr" : "1fr auto 1fr",
-                    gap: isMobile ? 8 : 12, 
-                    alignItems: "center",
+                    display: "flex", 
+                    justifyContent: "center",
                     fontSize: 12,
                   }}>
                     <div style={{
@@ -630,22 +627,11 @@ export default function App() {
                       borderRadius: 12,
                       border: "1px solid rgba(99,102,241,0.2)",
                       textAlign: "center",
+                      maxWidth: 300,
                     }}>
-                      <div style={{ fontWeight: 600, color: "#4338ca", marginBottom: 4 }}>Stage 1</div>
+                      <div style={{ fontWeight: 600, color: "#4338ca", marginBottom: 4 }}>AI Vision Model</div>
                       <div style={{ color: "#1e293b", fontWeight: 500 }}>{visionModel.label}</div>
                       <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{visionModel.role}</div>
-                    </div>
-                    {!isMobile && <div style={{ color: "#94a3b8", fontWeight: 600 }}>→</div>}
-                    <div style={{
-                      background: "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(168,85,247,0.1) 100%)",
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(139,92,246,0.2)",
-                      textAlign: "center",
-                    }}>
-                      <div style={{ fontWeight: 600, color: "#7c3aed", marginBottom: 4 }}>Stage 2</div>
-                      <div style={{ color: "#1e293b", fontWeight: 500 }}>{textModel.label}</div>
-                      <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{textModel.role}</div>
                     </div>
                   </div>
                 </div>
@@ -876,7 +862,7 @@ export default function App() {
                   How the GenAI nutrition engine works
                 </h2>
                 <p style={{ marginTop: 12, color: "#475569", fontSize: 16, lineHeight: 1.7 }}>
-                  The app uses a two-stage AI pipeline powered by Venice AI: {visionModel.label} for food identification and {textModel.label} for precision nutrition calculation.
+                  The app uses a single-stage AI analysis powered by Venice AI: {visionModel.label} for complete food identification and nutrition calculation.
                 </p>
               </div>
 
@@ -890,7 +876,7 @@ export default function App() {
                   description: "Snap a meal or upload a photo, then add optional context like ingredients, cuisine, or portion notes.",
                 }, {
                   title: "2. AI analysis",
-                  description: `${visionModel.label} identifies food items and estimates portions, then ${textModel.label} calculates precise macro and micronutrient breakdowns.`,
+                  description: `${visionModel.label} analyzes the food image and calculates precise macro and micronutrient breakdowns in a single step.`,
                 }, {
                   title: "3. Explainable output",
                   description: "You get a structured summary with macros, micros, per-item breakdowns, and AI caveats so you can trust the numbers.",

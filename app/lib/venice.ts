@@ -562,7 +562,7 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       console.log("Cleaned JSON preview:", jsonStr.substring(0, 200) + "...");
       
       try {
-        parsed = JSON.parse(jsonStr);
+      parsed = JSON.parse(jsonStr);
       } catch (parseError) {
         console.error("❌ JSON parse failed, trying fallback parsing...");
         // Try to extract just the core JSON object
@@ -586,14 +586,128 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
   }
 }
 
-// Main export: Analyze image with two-stage approach
+// Single-stage analysis using vision model for both food identification and nutrition
+async function analyzeSingleStage(
+  processedImage: ProcessedImage,
+  userHint?: string,
+  language: "english" | "french" = "english"
+): Promise<NutritionSummary> {
+  console.log("🔍 Single-stage analysis with", VISION_MODEL);
+
+  const schema = {
+    type: "object",
+    required: ["title", "confidence", "servingDescription", "totalCalories", "macros"],
+    properties: {
+      title: { type: "string", description: "Name of the dish or meal" },
+      confidence: { type: "number", description: "Confidence score 1-100 (percentage)" },
+      servingDescription: { type: "string", description: "Description of serving size with weight" },
+      totalCalories: { type: "number", description: "Total calories" },
+      macros: {
+        type: "object",
+        required: ["protein", "carbs", "fat"],
+        properties: {
+          protein: { type: "object", required: ["grams", "calories"], properties: { grams: { type: "number" }, calories: { type: "number" } } },
+          carbs: { type: "object", required: ["grams", "calories"], properties: { grams: { type: "number" }, calories: { type: "number" }, fiber: { type: "number" }, sugar: { type: "number" } } },
+          fat: { type: "object", required: ["grams", "calories"], properties: { grams: { type: "number" }, calories: { type: "number" }, saturated: { type: "number" }, unsaturated: { type: "number" } } }
+        }
+      },
+      micronutrients: {
+        type: "object",
+        properties: {
+          sodiumMg: { type: "number" }, potassiumMg: { type: "number" }, cholesterolMg: { type: "number" },
+          calciumMg: { type: "number" }, ironMg: { type: "number" }, vitaminCMg: { type: "number" }
+        }
+      },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["name", "quantity", "calories"],
+          properties: { name: { type: "string" }, quantity: { type: "string" }, calories: { type: "number" }, massGrams: { type: "number" } }
+        }
+      },
+      notes: { type: "array", items: { type: "string" } },
+      analysis: {
+        type: "object",
+        properties: {
+          visualObservations: { type: "array", items: { type: "string" } },
+          portionEstimate: { type: "string" },
+          confidenceNarrative: { type: "string" },
+          cautions: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
+  };
+
+  const languageInstructions = language === "french"
+    ? {
+        systemPrompt: `Vous êtes un analyste nutritionnel expert. Analysez l'image de nourriture et calculez les informations nutritionnelles complètes. Fournissez UNIQUEMENT un JSON valide correspondant au schéma.`,
+        userPrompt: `Analysez cette image de nourriture et calculez les informations nutritionnelles complètes. TOUTES les valeurs numériques doivent être des nombres entiers. Retournez UNIQUEMENT le JSON.`
+      }
+    : {
+        systemPrompt: `You are an expert nutrition analyst. Analyze the food image and calculate comprehensive nutritional information. Provide ONLY valid JSON matching the schema.`,
+        userPrompt: `Analyze this food image and calculate comprehensive nutritional information. ALL numeric values must be whole integers. Return ONLY the JSON.`
+      };
+
+  const userContent: any[] = [];
+  if (userHint) {
+    userContent.push({ type: "text", text: `User hint: "${userHint}". Use this as context.` });
+  }
+  userContent.push({ type: "text", text: languageInstructions.userPrompt });
+  userContent.push({ type: "image_url", image_url: { url: processedImage.dataUrl } });
+
+  const requestBody = {
+    model: VISION_MODEL,
+    temperature: 0.6,
+    response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
+    venice_parameters: { include_venice_system_prompt: true, disable_thinking: true, strip_thinking_response: true },
+    messages: [
+      { role: "system", content: [{ type: "text", text: languageInstructions.systemPrompt }] },
+      { role: "user", content: userContent }
+    ]
+  };
+
+  const data = await callVeniceAPI(requestBody);
+  const content = data?.choices?.[0]?.message?.content;
+  
+  if (!content) {
+    throw new Error("Vision model returned no content");
+  }
+
+  console.log("✅ Single-stage content received, parsing JSON...");
+  
+  let parsed: NutritionSummary;
+  try {
+    if (typeof content === "string") {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : content;
+      
+      // Clean JSON
+      let cleanedJson = jsonStr.replace(/\t/g, " ");
+      cleanedJson = cleanedJson.replace(/(\d+)\.\d{50,}/g, "$1");
+      cleanedJson = cleanedJson.replace(/:\s*(\d+)\.\d+/g, ": $1");
+      cleanedJson = cleanedJson.replace(/,(\s*[}\]])/g, "$1");
+      
+      parsed = JSON.parse(cleanedJson);
+    } else {
+      parsed = content;
+    }
+  } catch (error) {
+    console.error("❌ Failed to parse single-stage JSON:", error);
+    throw new Error("Failed to parse nutrition data from single-stage analysis");
+  }
+  
+  return parsed;
+}
+
+// Main export: Analyze image with single-stage approach using vision model
 export async function analyzeImageWithVenice(
   file: File,
   options: AnalyzeImageOptions = {}
 ): Promise<NutritionSummary> {
   const language = options.language || "english";
-  console.log("🚀 Starting two-stage analysis");
-  console.log(`Vision: ${VISION_MODEL} | Nutrition: ${TEXT_MODEL} | Language: ${language}`);
+  console.log("🚀 Starting single-stage analysis");
+  console.log(`Vision: ${VISION_MODEL} | Language: ${language}`);
 
   // Resize and convert image
   const processedImage = await resizeImageToJpeg(file);
@@ -603,14 +717,8 @@ export async function analyzeImageWithVenice(
     "characters"
   );
 
-  // Stage 1: Vision model identifies food
-  const foodDescription = await identifyFoodFromImage(
-    processedImage,
-    options.userDishDescription?.trim()
-  );
-
-  // Stage 2: Text model calculates nutrition with language support
-  const result = await calculateNutritionFromDescription(foodDescription, language);
+  // Single-stage: Vision model does both food identification and nutrition calculation
+  const result = await analyzeSingleStage(processedImage, options.userDishDescription?.trim(), language);
 
   console.log("✅ Analysis complete!");
   return result;
