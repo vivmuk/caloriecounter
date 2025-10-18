@@ -236,21 +236,21 @@ async function identifyFoodFromImage(
     text: `As a professional nutritionist and food analyst with deep regional cuisine expertise, examine this food image with expert precision. Provide a comprehensive analysis covering:
 
 FOOD IDENTIFICATION & REGIONAL CONTEXT:
-- Specific food names with regional variations (e.g., "Indian Vegetable Samosa", "Middle Eastern Sambusa", "Pakistani Samosa")
-- Exact preparation methods (deep-fried in ghee, shallow-fried in oil, baked, etc.)
+- Specific food names with regional variations (e.g., "Tomato Basil Soup", "Minestrone Soup", "Cream of Tomato Soup", "Indian Vegetable Samosa", "Middle Eastern Sambusa")
+- Exact preparation methods (deep-fried in ghee, shallow-fried in oil, baked, simmered, etc.)
 - Regional cooking techniques and traditional methods
-- Cultural context and cuisine type (Indian, Middle Eastern, South Asian, etc.)
+- Cultural context and cuisine type (Italian, Indian, Middle Eastern, South Asian, etc.)
 - Visible ingredients and regional variations
 
 PORTION ANALYSIS & CULTURAL SERVING STYLES:
-- Precise portion sizes using visual references (plate diameter, regional serving standards)
+- Precise portion sizes using visual references (bowl size, plate diameter, regional serving standards)
 - Number of pieces/items with accurate counts
 - Weight estimates in grams based on visual density and regional preparation
 - Traditional serving style and presentation details
 - Regional portion size expectations
 
 INGREDIENT BREAKDOWN & REGIONAL VARIATIONS:
-- All visible ingredients with specific regional identification
+- All visible ingredients with specific regional identification (tomatoes, cream, basil, parmesan, croutons, etc.)
 - Traditional sauces, dips, chutneys, and accompaniments
 - Regional cooking oils, fats, and preparation methods (ghee, coconut oil, vegetable oil, etc.)
 - Traditional seasonings, spices, and flavoring agents by region
@@ -258,7 +258,7 @@ INGREDIENT BREAKDOWN & REGIONAL VARIATIONS:
 - Cultural ingredient combinations and their nutritional implications
 
 NUTRITIONAL CONTEXT & REGIONAL COOKING IMPACT:
-- Food category and specific cuisine type
+- Food category and specific cuisine type (soup, curry, rice dish, etc.)
 - Traditional vs. modern preparation methods and their nutritional impact
 - Regional cooking method implications (traditional frying vs. modern methods)
 - Cultural ingredient combinations and their nutritional profiles
@@ -1168,6 +1168,30 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
       fatGrams = riceFat;
       
       console.log("Applied rice-based estimates:", { calories, proteinGrams, carbGrams, fatGrams, servings });
+    } else if (foodLower.includes('soup') || foodLower.includes('broth') || foodLower.includes('stew')) {
+      // Soup-based dishes with regional variations
+      let soupCalories = 120 * servings;
+      let soupProtein = 6 * servings;
+      let soupCarbs = 15 * servings;
+      let soupFat = 4 * servings;
+      
+      if (foodLower.includes('tomato') || foodLower.includes('cream')) {
+        // Cream-based soups are higher in calories and fat
+        soupCalories = 180 * servings;
+        soupFat = 12 * servings;
+      } else if (foodLower.includes('chicken') || foodLower.includes('beef')) {
+        // Meat-based soups have more protein
+        soupCalories = 150 * servings;
+        soupProtein = 12 * servings;
+        soupFat = 6 * servings;
+      }
+      
+      calories = soupCalories;
+      proteinGrams = soupProtein;
+      carbGrams = soupCarbs;
+      fatGrams = soupFat;
+      
+      console.log("Applied soup estimates:", { calories, proteinGrams, carbGrams, fatGrams, servings });
     } else {
       // Generic fallback for unknown foods
       calories = 200 * servings;
@@ -1287,6 +1311,34 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
         ironMg: 1,          // Some iron
         vitaminCMg: 25       // High vitamin C
       };
+    } else if (foodLower.includes('soup') || foodLower.includes('broth') || foodLower.includes('stew')) {
+      // Realistic micronutrients for soup - regional variations
+      let sodiumMg = 400;      // Base sodium (soups are typically high in sodium)
+      let potassiumMg = 200;    // Base potassium
+      let calciumMg = 50;       // Base calcium
+      let ironMg = 2;          // Base iron
+      let vitaminCMg = 15;     // Base vitamin C
+      
+      // Regional variations in soup preparation
+      if (foodLower.includes('tomato') || foodLower.includes('cream')) {
+        // Tomato/cream soups often have more sodium and vitamin C
+        sodiumMg = 500;
+        vitaminCMg = 25;
+      } else if (foodLower.includes('chicken') || foodLower.includes('beef')) {
+        // Meat-based soups have more iron and protein
+        sodiumMg = 450;
+        ironMg = 3;
+        vitaminCMg = 20;
+      }
+      
+      micros = {
+        sodiumMg: sodiumMg,
+        potassiumMg: potassiumMg,
+        cholesterolMg: 0,     // Assume vegetarian unless meat is specified
+        calciumMg: calciumMg,
+        ironMg: ironMg,
+        vitaminCMg: vitaminCMg
+      };
     } else {
       // Generic micronutrient estimates
       micros = {
@@ -1366,6 +1418,28 @@ function transformVisionModelOutput(rawData: any): NutritionSummary {
           quantity: "1 serving",
           calories: Math.round(calories * 0.1), // 10% of total calories
           massGrams: 5 // ~5g of seasonings
+        }
+      ];
+    } else if (foodLower.includes('soup') || foodLower.includes('broth') || foodLower.includes('stew')) {
+      // Soup-based dish breakdown
+      items = [
+        {
+          name: "Soup Base",
+          quantity: `${servings} serving${servings > 1 ? 's' : ''}`,
+          calories: Math.round(calories * 0.7), // 70% of total calories
+          massGrams: 200 * servings // ~200g per serving
+        },
+        {
+          name: "Cream & Dairy",
+          quantity: "1 serving",
+          calories: Math.round(calories * 0.2), // 20% of total calories
+          massGrams: 30 // ~30g of cream/dairy
+        },
+        {
+          name: "Garnishes & Seasonings",
+          quantity: "1 serving",
+          calories: Math.round(calories * 0.1), // 10% of total calories
+          massGrams: 10 // ~10g of garnishes
         }
       ];
     } else {
@@ -1554,8 +1628,9 @@ export async function analyzeImageWithVenice(
     "characters"
   );
 
-  // Single-stage: Vision model does both food identification and nutrition calculation
-  const result = await analyzeSingleStage(processedImage, options.userDishDescription?.trim(), language);
+  // Two-stage: First identify food, then calculate nutrition with structured schema
+  const foodDescription = await identifyFoodFromImage(processedImage, options.userDishDescription?.trim());
+  const result = await calculateNutritionFromDescription(foodDescription, language);
 
   console.log("✅ Analysis complete!");
   return result;
