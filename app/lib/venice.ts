@@ -659,7 +659,7 @@ async function analyzeSingleStage(
   const requestBody = {
     model: VISION_MODEL,
     temperature: 0.6,
-    response_format: { type: "json_schema", json_schema: { name: "nutrition_summary", schema } },
+    // Remove JSON schema for now - vision model might not support it
     venice_parameters: { include_venice_system_prompt: true, disable_thinking: true, strip_thinking_response: true },
     messages: [
       { role: "system", content: [{ type: "text", text: languageInstructions.systemPrompt }] },
@@ -671,29 +671,49 @@ async function analyzeSingleStage(
   const content = data?.choices?.[0]?.message?.content;
   
   if (!content) {
+    console.error("❌ No content received from vision model");
+    console.error("Full response:", data);
     throw new Error("Vision model returned no content");
   }
 
   console.log("✅ Single-stage content received, parsing JSON...");
+  console.log("Raw content preview:", typeof content, content?.substring(0, 200) + "...");
   
   let parsed: NutritionSummary;
   try {
     if (typeof content === "string") {
+      console.log("🔍 Parsing string content...");
+      
+      // Try to find JSON in the content
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : content;
+      if (!jsonMatch) {
+        console.error("❌ No JSON found in content");
+        console.error("Content:", content);
+        throw new Error("No JSON found in vision model response");
+      }
       
-      // Clean JSON
-      let cleanedJson = jsonStr.replace(/\t/g, " ");
-      cleanedJson = cleanedJson.replace(/(\d+)\.\d{50,}/g, "$1");
-      cleanedJson = cleanedJson.replace(/:\s*(\d+)\.\d+/g, ": $1");
-      cleanedJson = cleanedJson.replace(/,(\s*[}\]])/g, "$1");
+      const jsonStr = jsonMatch[0];
+      console.log("📝 Found JSON, cleaning...");
       
+      // Clean JSON more aggressively
+      let cleanedJson = jsonStr
+        .replace(/\t/g, " ")                    // Replace tabs
+        .replace(/(\d+)\.\d{50,}/g, "$1")      // Truncate long decimals
+        .replace(/:\s*(\d+)\.\d+/g, ": $1")    // Round decimals to integers
+        .replace(/,(\s*[}\]])/g, "$1")         // Remove trailing commas
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Add quotes to unquoted keys
+        .replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted strings
+      
+      console.log("🧹 Cleaned JSON preview:", cleanedJson.substring(0, 300) + "...");
       parsed = JSON.parse(cleanedJson);
     } else {
+      console.log("📦 Content is already parsed object");
       parsed = content;
     }
   } catch (error) {
     console.error("❌ Failed to parse single-stage JSON:", error);
+    console.error("Raw content:", content);
+    console.error("Content type:", typeof content);
     throw new Error("Failed to parse nutrition data from single-stage analysis");
   }
   
