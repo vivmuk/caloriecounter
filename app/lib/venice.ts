@@ -215,6 +215,42 @@ function extractTextFromResponse(data: any): string | undefined {
   return undefined;
 }
 
+// Ensure all numeric values in the nutrition summary are integers
+function ensureIntegerValues(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (typeof obj === "number") {
+    return Math.round(obj);
+  }
+  
+  if (typeof obj === "string") {
+    // Try to parse as number and round if it's a decimal
+    const num = parseFloat(obj);
+    if (!isNaN(num) && num.toString() !== obj) {
+      return Math.round(num).toString();
+    }
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(ensureIntegerValues);
+  }
+  
+  if (typeof obj === "object") {
+    const result: any = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        result[key] = ensureIntegerValues(obj[key]);
+      }
+    }
+    return result;
+  }
+  
+  return obj;
+}
+
 // Stage 1: Identify food items from image using vision model
 async function identifyFoodFromImage(
   processedImage: ProcessedImage,
@@ -614,58 +650,76 @@ Return ONLY the JSON object with INTEGER VALUES ONLY, no markdown formatting, no
       // Extract JSON from potential markdown
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       jsonStr = jsonMatch ? jsonMatch[0] : content;
-      
-      // Clean up malformed JSON:
-      // 1. Replace tabs with spaces
-      jsonStr = jsonStr.replace(/\t/g, " ");
-      
-      // 2. Fix extremely long decimal numbers (truncate completely)
-      jsonStr = jsonStr.replace(/(\d+)\.\d{50,}/g, "$1");
-      
-      // 3. Round all remaining decimals to integers for numeric fields
-      jsonStr = jsonStr.replace(/:\s*(\d+)\.\d+/g, ": $1");
-      
-      // 4. Remove trailing commas before closing braces/brackets
-      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
-      
-      // 5. Fix malformed quantity fields (e.g., "caloriesPerItem: 60," -> "3 pieces")
-      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+,"/g, '"quantity": "3 pieces"');
-      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+,"/g, '"quantity": "1 serving"');
-      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+"/g, '"quantity": "3 pieces"');
-      jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+"/g, '"quantity": "1 serving"');
-      
-      // 5b. Fix any remaining malformed quantity fields with various patterns
-      jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*caloriesPer[^"]*"/g, '"quantity": "1 serving"');
-      jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*calories[^"]*"/g, '"quantity": "1 serving"');
-      
-      // 6. Fix common JSON issues
-      jsonStr = jsonStr.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Add quotes to unquoted keys
-      jsonStr = jsonStr.replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted string values
-      
-      console.log("🧹 JSON cleaned, attempting parse...");
-      console.log("Cleaned JSON preview:", jsonStr.substring(0, 200) + "...");
-      
-      try {
-      parsed = JSON.parse(jsonStr);
-      } catch (parseError) {
-        console.error("❌ JSON parse failed, trying fallback parsing...");
-        // Try to extract just the core JSON object
-        const coreMatch = jsonStr.match(/\{[\s\S]*"title"[\s\S]*\}/);
-        if (coreMatch) {
-          parsed = JSON.parse(coreMatch[0]);
-        } else {
-          throw parseError;
-        }
-      }
+    } else if (typeof content === "object" && content !== null) {
+      // If content is already an object, convert to JSON string
+      jsonStr = JSON.stringify(content);
+      console.log("📦 Content is already an object, converted to JSON string");
     } else {
-      parsed = content;
+      throw new Error("Invalid content type received from nutrition model");
     }
+    
+    // Clean up malformed JSON:
+    // 1. Replace tabs with spaces
+    jsonStr = jsonStr.replace(/\t/g, " ");
+    
+    // 2. Fix extremely long decimal numbers (truncate completely)
+    jsonStr = jsonStr.replace(/(\d+)\.\d{50,}/g, "$1");
+    
+    // 3. Round all remaining decimals to integers for numeric fields
+    jsonStr = jsonStr.replace(/:\s*(\d+)\.\d+/g, ": $1");
+    
+    // 3b. Convert any decimal values to integers (more aggressive)
+    jsonStr = jsonStr.replace(/:\s*(\d+\.\d+)/g, (match, decimal) => {
+      const rounded = Math.round(parseFloat(decimal));
+      return `: ${rounded}`;
+    });
+    
+    // 4. Remove trailing commas before closing braces/brackets
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
+    
+    // 5. Fix malformed quantity fields (e.g., "caloriesPerItem: 60," -> "3 pieces")
+    jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+,"/g, '"quantity": "3 pieces"');
+    jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+,"/g, '"quantity": "1 serving"');
+    jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerItem:\s*\d+"/g, '"quantity": "3 pieces"');
+    jsonStr = jsonStr.replace(/"quantity":\s*"caloriesPerServing:\s*\d+"/g, '"quantity": "1 serving"');
+    
+    // 5b. Fix any remaining malformed quantity fields with various patterns
+    jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*caloriesPer[^"]*"/g, '"quantity": "1 serving"');
+    jsonStr = jsonStr.replace(/"quantity":\s*"[^"]*calories[^"]*"/g, '"quantity": "1 serving"');
+    
+    // 6. Fix common JSON issues
+    jsonStr = jsonStr.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Add quotes to unquoted keys
+    jsonStr = jsonStr.replace(/:\s*([^",{\[\s][^,}\]\s]*)\s*([,}\]])/g, ': "$1"$2'); // Add quotes to unquoted string values
+    
+    console.log("🧹 JSON cleaned, attempting parse...");
+    console.log("Cleaned JSON preview:", jsonStr.substring(0, 200) + "...");
+    
+    try {
+      parsed = JSON.parse(jsonStr);
+      
+      // Final validation: ensure all numeric values are integers
+      parsed = ensureIntegerValues(parsed);
+      
+    } catch (parseError) {
+      console.error("❌ JSON parse failed, trying fallback parsing...");
+      // Try to extract just the core JSON object
+      const coreMatch = jsonStr.match(/\{[\s\S]*"title"[\s\S]*\}/);
+      if (coreMatch) {
+        parsed = JSON.parse(coreMatch[0]);
+        parsed = ensureIntegerValues(parsed);
+      } else {
+        throw parseError;
+      }
+    }
+  } else {
+    parsed = content as unknown as NutritionSummary;
+    parsed = ensureIntegerValues(parsed);
+  }
 
-    console.log("✅ Two-stage analysis complete!");
-    return parsed;
+  console.log("✅ Two-stage analysis complete!");
+  return parsed;
   } catch (error) {
     console.error("❌ Failed to parse nutrition JSON:", error);
-    console.error("Raw content:", content);
     throw new Error("Failed to parse nutrition data. The model returned invalid JSON format.");
   }
 }
@@ -873,6 +927,10 @@ Return ONLY the JSON with INTEGER VALUES ONLY.`
         .replace(/(\d+)\.\d{50,}/g, "$1")      // Truncate long decimals
         .replace(/:\s*(\d+)\.\d+/g, ": $1")    // Round decimals to integers
         .replace(/,(\s*[}\]])/g, "$1")         // Remove trailing commas
+        .replace(/:\s*(\d+\.\d+)/g, (match, decimal) => {
+          const rounded = Math.round(parseFloat(decimal));
+          return `: ${rounded}`;
+        }) // Convert any remaining decimals to integers
         .replace(/"quantity":\s*"caloriesPerItem:\s*\d+,"/g, '"quantity": "3 pieces"') // Fix malformed quantity fields
         .replace(/"quantity":\s*"caloriesPerServing:\s*\d+,"/g, '"quantity": "1 serving"')
         .replace(/"quantity":\s*"caloriesPerItem:\s*\d+"/g, '"quantity": "3 pieces"')
@@ -887,9 +945,15 @@ Return ONLY the JSON with INTEGER VALUES ONLY.`
       
       // Transform vision model output to expected NutritionSummary format
       parsed = transformVisionModelOutput(rawData);
+      
+      // Ensure all numeric values are integers
+      parsed = ensureIntegerValues(parsed);
     } else {
       console.log("📦 Content is already parsed object");
       parsed = transformVisionModelOutput(content);
+      
+      // Ensure all numeric values are integers
+      parsed = ensureIntegerValues(parsed);
     }
   } catch (error) {
     console.error("❌ Failed to parse single-stage JSON:", error);
