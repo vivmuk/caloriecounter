@@ -3,7 +3,9 @@ import {
   analyzeImageWithVenice,
   type NutritionSummary,
 } from "../app/lib/venice";
+import { runAllModels, type MultiModelResult } from "../app/lib/multi-model";
 import { NutritionSummary as NutritionSummaryView } from "../app/components/NutritionSummary";
+import { ModelComparisonPanel } from "../app/components/ModelComparisonPanel";
 import { CameraIcon, GalleryIcon, SparkleIcon } from "./components/Icons";
 
 type Section = "scan" | "howItWorks";
@@ -16,6 +18,9 @@ export default function App() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<NutritionSummary | null>(null);
+  const [allResults, setAllResults] = React.useState<MultiModelResult[]>([]);
+  const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
+  const [useMultiModel, setUseMultiModel] = React.useState(true);
   const [showCamera, setShowCamera] = React.useState(false);
   const [stream, setStream] = React.useState<MediaStream | null>(null);
   const [cameraLoading, setCameraLoading] = React.useState(false);
@@ -268,19 +273,44 @@ export default function App() {
     setLoading(true);
     setError(null);
     setAnalysisTime(null);
+    setAllResults([]);
+    setSelectedModel(null);
     let succeeded = false;
     const startTime = analysisStartRef.current ?? performance.now();
     try {
-      const summary = await analyzeImageWithVenice(file, {
-        userDishDescription: dishHint.trim() || undefined,
-        language: useFrench ? "french" : "english",
-      });
-      const endTime = performance.now();
-      const timeInSeconds = ((endTime - startTime) / 1000).toFixed(1);
-      setAnalysisTime(parseFloat(timeInSeconds));
-      setResult(summary);
-      setProgress(100);
-      succeeded = true;
+      if (useMultiModel) {
+        // Run all models in parallel
+        const results = await runAllModels(file, {
+          userDishDescription: dishHint.trim() || undefined,
+          language: useFrench ? "french" : "english",
+        });
+
+        const endTime = performance.now();
+        const timeInSeconds = ((endTime - startTime) / 1000).toFixed(1);
+        setAnalysisTime(parseFloat(timeInSeconds));
+        setAllResults(results);
+
+        // Auto-select first result if available
+        if (results.length > 0 && results[0].confidence > 0) {
+          setSelectedModel(results[0].modelName);
+          setResult(results[0].nutritionSummary);
+        }
+
+        setProgress(100);
+        succeeded = true;
+      } else {
+        // Single model mode (legacy)
+        const summary = await analyzeImageWithVenice(file, {
+          userDishDescription: dishHint.trim() || undefined,
+          language: useFrench ? "french" : "english",
+        });
+        const endTime = performance.now();
+        const timeInSeconds = ((endTime - startTime) / 1000).toFixed(1);
+        setAnalysisTime(parseFloat(timeInSeconds));
+        setResult(summary);
+        setProgress(100);
+        succeeded = true;
+      }
     } catch (err) {
       setProgress(0);
       setError(err instanceof Error ? err.message : "Failed to analyze image");
@@ -297,6 +327,8 @@ export default function App() {
     setFile(null);
     setImage(null);
     setResult(null);
+    setAllResults([]);
+    setSelectedModel(null);
     setError(null);
     setDishHint("");
     setAnalysisTime(null);
@@ -307,6 +339,23 @@ export default function App() {
       fileInputRef.current.value = "";
     }
     stopCamera();
+  }
+
+  // Handle model selection from comparison panel
+  function handleSelectModel(modelName: string) {
+    setSelectedModel(modelName);
+    const selected = allResults.find((r) => r.modelName === modelName);
+    if (selected) {
+      setResult(selected.nutritionSummary);
+    }
+  }
+
+  // Handle saving a specific model result
+  function handleSaveResult(modelResult: MultiModelResult) {
+    setResult(modelResult.nutritionSummary);
+    setSelectedModel(modelResult.modelName);
+    // Additional save logic can be added here (e.g., to local storage or a database)
+    console.log("Saved result from", modelResult.displayName, modelResult.nutritionSummary);
   }
 
   const navItems: VeniceContentElement[] = [
@@ -831,6 +880,15 @@ export default function App() {
                 }}>
                   {error}
                 </div>
+              )}
+
+              {useMultiModel && allResults.length > 0 && (
+                <ModelComparisonPanel
+                  results={allResults}
+                  selectedModel={selectedModel}
+                  onSelectModel={handleSelectModel}
+                  onSave={handleSaveResult}
+                />
               )}
 
               {result && (
